@@ -1,12 +1,13 @@
 {
-    "name": "NeonRush.Presentation",
-    "rootNamespace": "NeonRush.Presentation",
+    "name": "NeonRush.Composition",
+    "rootNamespace": "NeonRush.Composition",
     "references": [
         "NeonRush.Core",
         "NeonRush.Domain",
         "NeonRush.Application",
-        "Unity.InputSystem",
-        "UnityEngine.UI"
+        "NeonRush.Infrastructure",
+        "NeonRush.Presentation",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
