@@ -1,4 +1,5 @@
 using System;
+using NeonRush.Application.Ads;
 using NeonRush.Application.Economy;
 using NeonRush.Application.Events;
 using NeonRush.Application.Progression;
@@ -7,10 +8,12 @@ using NeonRush.Application.Save;
 using NeonRush.Application.States;
 using NeonRush.Core.DI;
 using NeonRush.Core.Events;
+using NeonRush.Domain.Ads;
 using NeonRush.Domain.Economy;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Run;
 using NeonRush.Domain.Save;
+using NeonRush.Infrastructure.Ads;
 using NeonRush.Infrastructure.Save;
 using NeonRush.Infrastructure.Time;
 using NeonRush.Presentation.Input;
@@ -47,6 +50,15 @@ namespace NeonRush.Composition
         [Tooltip("Seed for the procedural track. 0 = random each run.")]
         [SerializeField] private int _seed;
 
+        [Header("Ads (development)")]
+        [Tooltip("Simulate ads in the Editor so the revive and double-coins flows can be exercised " +
+                 "without an SDK. MUST be off in a release build.")]
+        [SerializeField] private bool _simulateAds = true;
+
+        [Tooltip("What a simulated ad reports. Set to Skipped and play for five minutes — if anything " +
+                 "is granted, there is a payout bug.")]
+        [SerializeField] private AdResult _simulatedAdResult = AdResult.Completed;
+
         private Container _container;
         private EventBus _bus;
         private GameStateMachine _states;
@@ -56,6 +68,7 @@ namespace NeonRush.Composition
         private RunRewardService _rewards;
         private PlayerProfile _profile;
         private SaveService _save;
+        private AdDirector _adDirector;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -124,6 +137,24 @@ namespace NeonRush.Composition
 
             _save = new SaveService(store, _wallet, _profile, _bus, clock);
             _container.RegisterInstance(_save);
+
+            // --- Ads ------------------------------------------------------------------------
+            //
+            // A release build binds NullAdsService until the AdMob adapter is integrated; the game is
+            // complete and shippable either way. SimulatedAdsService exists so the revive and
+            // double-coins flows can actually be exercised in the Editor without an SDK, a network
+            // and 30 seconds of a real ad per attempt.
+            IAdsService ads = _simulateAds && UnityEngine.Application.isEditor
+                ? new SimulatedAdsService(_simulatedAdResult)
+                : new NullAdsService();
+
+            _container.RegisterInstance(ads);
+
+            var adPolicy = new AdPolicy(new AdPolicyConfig(), clock);
+            _container.RegisterInstance(adPolicy);
+
+            _adDirector = new AdDirector(ads, adPolicy, _rewards, _profile, _bus);
+            _container.RegisterInstance(_adDirector);
 
             BuildScene();
 
@@ -206,7 +237,7 @@ namespace NeonRush.Composition
             var uiRoot = new GameObject("UI").transform;
             uiRoot.SetParent(transform, worldPositionStays: false);
 
-            _hud = new RunHud(_session, _bus, uiRoot, _wallet);
+            _hud = new RunHud(_session, _bus, uiRoot, _wallet, _adDirector);
 
             _input = new SwipeInput();
         }
@@ -366,13 +397,94 @@ namespace NeonRush.Composition
             _camera.Tick(deltaTime, NormalisedSpeed);
 
             if (!_awaitingRestart) return;
+            if (_adDirector.IsAdInFlight) return;
             if (Time.unscaledTime < _restartArmedAt) return;
+
+            // Swipe up = revive (watch an ad). Deliberately a distinct gesture from the tap that
+            // dismisses the screen: a player who is jabbing at the screen in frustration must not
+            // trigger a 30-second ad they never asked for.
+            if (command == SwipeCommand.Up && _adDirector.CanOfferRevive(_session.RevivesUsed))
+            {
+                OfferRevive();
+                return;
+            }
+
+            // Swipe down = double the coins you just earned. Also a distinct gesture, for the same
+            // reason. Note this is purely additive: the coins are already banked, so declining costs
+            // the player nothing. See RunRewardService.
+            if (command == SwipeCommand.Down && _adDirector.CanOfferDoubleCoins)
+            {
+                OfferDoubleCoins();
+                return;
+            }
 
             if (command != SwipeCommand.None || WasTapped())
             {
+                LeaveGameOver();
+            }
+        }
+
+        private void OfferDoubleCoins()
+        {
+            _awaitingRestart = false;
+
+            _adDirector.OfferDoubleCoins(granted =>
+            {
+                if (granted > 0)
+                {
+                    Debug.Log($"[NeonRush] Rewarded ad doubled the run: +{granted} coins.");
+                }
+
+                // Either way, back to the game-over screen. The doubling offer is gone (it can only
+                // be claimed once), but nothing was taken away.
+                _awaitingRestart = true;
+                _restartArmedAt = Time.unscaledTime + RestartArmDelay;
+
+                _hud.RefreshGameOverOffers();
+            });
+        }
+
+        private void OfferRevive()
+        {
+            _awaitingRestart = false;
+
+            _adDirector.OfferRevive(_session.RevivesUsed, watched =>
+            {
+                if (!watched)
+                {
+                    // No ad, or they closed it early. Nothing is granted, and we simply return to the
+                    // game-over screen — never punish a failed ad load by taking something away.
+                    _awaitingRestart = true;
+                    _restartArmedAt = Time.unscaledTime + RestartArmDelay;
+                    return;
+                }
+
+                // Clear the wall they just died in BEFORE resuming. Reviving into the obstacle that
+                // killed you, and dying again on the next frame, turns a paid revive into a swindle.
+                _track.ClearObstaclesNear(ReviveClearRadius);
+
+                _player.Reset();
+                _session.Revive();
+
+                _states.TransitionTo(GameState.Playing);
+            });
+        }
+
+        /// <summary>Metres of track cleared around the player on revive. Generous on purpose — see TrackStreamer.</summary>
+        private const float ReviveClearRadius = 30f;
+
+        private void LeaveGameOver()
+        {
+            _awaitingRestart = false;
+
+            // The interstitial is offered here and NOWHERE else in the codebase. That is what makes
+            // "an ad can never interrupt gameplay" a structural fact rather than a rule someone has
+            // to remember.
+            _adDirector.MaybeShowInterstitial(_session.Duration, () =>
+            {
                 _states.TransitionTo(GameState.MainMenu);
                 StartRun();
-            }
+            });
         }
 
         private static bool WasTapped()
@@ -398,6 +510,7 @@ namespace NeonRush.Composition
             // bus it reads from are torn down.
             _save?.Dispose();
 
+            _adDirector?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
             _hud?.Dispose();

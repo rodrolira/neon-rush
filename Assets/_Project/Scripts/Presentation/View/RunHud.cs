@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NeonRush.Application.Ads;
 using NeonRush.Application.Events;
 using NeonRush.Application.Run;
 using NeonRush.Core.Events;
@@ -42,14 +43,21 @@ namespace NeonRush.Presentation.View
         private int _lastCoins = -1;
         private int _lastDistance = -1;
 
-        public RunHud(RunSession session, IEventBus bus, Transform uiRoot, Wallet wallet)
+        private AdDirector _ads;
+
+        public RunHud(RunSession session, IEventBus bus, Transform uiRoot, Wallet wallet, AdDirector ads)
         {
             _session = session;
+            _ads = ads;
 
             Build(uiRoot);
 
             _subscriptions.Add(bus.Subscribe<RunEnded>(OnRunEnded));
             _subscriptions.Add(bus.Subscribe<RunStarted>(OnRunStarted));
+
+            // A revived run continues, so the death screen must come down — otherwise the player
+            // pays for a revive and then plays the rest of the run behind a "RUN OVER" overlay.
+            _subscriptions.Add(bus.Subscribe<RunResumed>(_ => _gameOverPanel.SetActive(false)));
 
             // The bank is event-driven rather than polled: it changes a handful of times per session,
             // so rewriting it every frame would dirty the Canvas and force a UI rebuild for nothing.
@@ -100,19 +108,49 @@ namespace NeonRush.Presentation.View
             _lastScore = _lastCoins = _lastDistance = -1;
         }
 
+        private RunEnded _lastRun;
+
         private void OnRunEnded(RunEnded e)
         {
+            _lastRun = e;
             _gameOverPanel.SetActive(true);
 
+            RefreshGameOverOffers();
+        }
+
+        /// <summary>
+        /// Redraws the death screen, including whichever ad offers are actually available right now.
+        ///
+        /// Offers are only ever shown when they can genuinely be honoured (<see cref="AdDirector"/>
+        /// checks that an ad is loaded). Advertising a reward and then failing to produce an ad is
+        /// worse than never offering it at all — the player experiences it as the game reneging.
+        /// </summary>
+        public void RefreshGameOverOffers()
+        {
+            var e = _lastRun;
+
             // The coins are already in the bank by the time this renders — RunRewardService credits
-            // them the instant the run ends, before any offer. That is deliberate; see the note in
-            // RunRewardService about never holding earned coins hostage behind an ad.
-            _gameOverText.text =
+            // them the instant the run ends, before any offer. Declining every offer below costs the
+            // player nothing.
+            var text =
                 $"RUN OVER\n\n" +
                 $"{(int)e.DistanceMetres:N0} m\n" +
                 $"+{e.CoinsCollected:N0} coins banked\n" +
-                $"score {e.Score:N0}\n\n" +
-                $"tap to run again";
+                $"score {e.Score:N0}\n\n";
+
+            if (_ads.CanOfferRevive(_session.RevivesUsed))
+            {
+                text += "SWIPE UP  —  revive (watch ad)\n";
+            }
+
+            if (_ads.CanOfferDoubleCoins)
+            {
+                text += $"SWIPE DOWN  —  double to {e.CoinsCollected * 2:N0} (watch ad)\n";
+            }
+
+            text += "\ntap to run again";
+
+            _gameOverText.text = text;
         }
 
         private void Build(Transform uiRoot)

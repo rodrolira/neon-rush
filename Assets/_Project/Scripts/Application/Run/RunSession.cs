@@ -57,6 +57,16 @@ namespace NeonRush.Application.Run
         public bool IsRunning { get; private set; }
 
         /// <summary>
+        /// How many times the current run has been revived.
+        ///
+        /// Drives escalating revive cost. The first revive should be cheap or free (a rewarded ad);
+        /// each subsequent one costs more. Unlimited cheap revives destroy the leaderboard — a score
+        /// stops measuring skill and starts measuring patience — and they destroy the tension that
+        /// makes the game worth playing at all.
+        /// </summary>
+        public int RevivesUsed { get; private set; }
+
+        /// <summary>
         /// True while the player is still inside the opening grace period, during which no
         /// obstacles spawn. The spawner reads this rather than duplicating the distance check.
         /// </summary>
@@ -84,11 +94,37 @@ namespace NeonRush.Application.Run
             Score = 0;
             Duration = 0f;
             Speed = _tuning.BaseSpeed;
+            RevivesUsed = 0;
             _scoreAccumulator = 0f;
             _lastMilestone = 0;
             IsRunning = true;
 
             _bus.Publish(new RunStarted(RunNumber));
+        }
+
+        /// <summary>
+        /// Brings a dead run back to life, preserving distance, coins and score.
+        ///
+        /// This is the counterpart to <see cref="Begin"/>: <c>Begin</c> starts a NEW run and zeroes
+        /// everything; <c>Revive</c> continues the SAME one. Conflating them is how a player pays for
+        /// a revive and finds their score reset to zero — which is the kind of bug that produces a
+        /// refund request and a very fair one-star review.
+        ///
+        /// The caller is responsible for clearing the obstacles the player is standing inside; see
+        /// TrackStreamer.ClearObstaclesNear. Reviving into the wall that just killed you, and dying
+        /// again immediately, turns a paid revive into a swindle.
+        /// </summary>
+        public void Revive()
+        {
+            if (IsRunning)
+            {
+                throw new InvalidOperationException("Revive() called on a run that is not over.");
+            }
+
+            RevivesUsed++;
+            IsRunning = true;
+
+            _bus.Publish(new RunResumed(RunNumber, RevivesUsed));
         }
 
         /// <summary>

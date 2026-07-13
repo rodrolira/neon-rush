@@ -72,6 +72,24 @@ namespace NeonRush.Application.Events
         }
     }
 
+    /// <summary>
+    /// A dead run was brought back to life (rewarded ad, or a gem spend). The same run continues:
+    /// distance, coins and score are all preserved.
+    /// </summary>
+    public readonly struct RunResumed
+    {
+        public readonly int RunNumber;
+
+        /// <summary>How many times this run has now been revived. Drives escalating cost.</summary>
+        public readonly int RevivesUsed;
+
+        public RunResumed(int runNumber, int revivesUsed)
+        {
+            RunNumber = runNumber;
+            RevivesUsed = revivesUsed;
+        }
+    }
+
     /// <summary>The player moved between lanes. Published on the decision, not on arrival.</summary>
     public readonly struct LaneChanged
     {

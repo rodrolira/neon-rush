@@ -204,6 +204,39 @@ namespace NeonRush.Presentation.World
             }
         }
 
+        /// <summary>
+        /// Removes every obstacle within <paramref name="metres"/> of the player, in both directions.
+        ///
+        /// Called on revive. Without it, the player is resurrected standing inside the obstacle that
+        /// just killed them, the collision test fires on the very next frame, and they die again
+        /// instantly — having just paid for the privilege with a 30-second ad. That is not a bug the
+        /// player forgives; it is the kind that produces a refund request and a one-star review, and
+        /// it is entirely avoidable with four lines of code.
+        ///
+        /// The window is generous on purpose. Clearing only the exact obstacle they touched still
+        /// leaves them a fraction of a second from the next one, at 26 m/s, with no time to react.
+        /// A revive must hand back a survivable situation, not a technically-alive one.
+        /// </summary>
+        public void ClearObstaclesNear(float metres)
+        {
+            for (var c = 0; c < _active.Count; c++)
+            {
+                var chunk = _active[c];
+                var obstacles = chunk.Obstacles;
+
+                for (var i = obstacles.Count - 1; i >= 0; i--)
+                {
+                    var obstacle = obstacles[i];
+                    if (obstacle == null) continue;
+
+                    if (Mathf.Abs(obstacle.transform.position.z) > metres) continue;
+
+                    _obstaclePool.Return(obstacle);
+                    obstacles.RemoveAt(i);
+                }
+            }
+        }
+
         /// <summary>Marks a coin as taken and returns it to the pool.</summary>
         internal void TakeCoin(Chunk chunk, int index)
         {
