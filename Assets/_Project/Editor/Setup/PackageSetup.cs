@@ -125,7 +125,11 @@ namespace NeonRush.EditorTools.Setup
         private static void Fail(string message)
         {
             Debug.LogError($"[PackageSetup] {message}");
-            if (Application.isBatchMode)
+
+            // Fully qualified deliberately: this project defines a `NeonRush.Application` namespace,
+            // so a bare `Application` binds to that instead of UnityEngine.Application and fails to
+            // compile. Anything in an editor script touching UnityEngine.Application must qualify it.
+            if (UnityEngine.Application.isBatchMode)
             {
                 EditorApplication.Exit(1);
             }
