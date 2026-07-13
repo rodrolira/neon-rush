@@ -1,0 +1,18 @@
+{
+    "name": "NeonRush.Infrastructure",
+    "rootNamespace": "NeonRush.Infrastructure",
+    "references": [
+        "NeonRush.Core",
+        "NeonRush.Domain",
+        "NeonRush.Application"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

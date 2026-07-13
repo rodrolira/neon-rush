@@ -1,0 +1,19 @@
+{
+    "name": "NeonRush.Presentation",
+    "rootNamespace": "NeonRush.Presentation",
+    "references": [
+        "NeonRush.Core",
+        "NeonRush.Domain",
+        "NeonRush.Application",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

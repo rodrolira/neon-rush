@@ -13,32 +13,37 @@ namespace NeonRush.Domain.Run
     ///
     /// The defaults below are a playable starting point, not a balanced game. Balance comes from
     /// telemetry (where do players die? at what distance do they quit?), not from intuition.
+    ///
+    /// Implementation note: properties are plain get/set rather than <c>init</c>. Unity 6 compiles
+    /// C# 9 against .NET Standard 2.1, which does not ship <c>System.Runtime.CompilerServices.IsExternalInit</c>,
+    /// so <c>init</c> accessors and <c>record</c> types do not compile without a hand-written shim.
+    /// Treat instances as immutable by convention: build once at boot, never mutate afterwards.
     /// </summary>
     public sealed class RunTuning
     {
         // --- Track geometry ---------------------------------------------------------------
 
         /// <summary>Lateral distance between lane centres, in metres.</summary>
-        public float LaneWidth { get; init; } = 2.6f;
+        public float LaneWidth { get; set; } = 2.6f;
 
         /// <summary>
         /// Seconds to slide from one lane to the next. Tuning note: below ~0.10s the move reads
         /// as a teleport; above ~0.25s the game feels unresponsive and players blame the controls
         /// for deaths that were their own fault. 0.15 is the sweet spot most runners land on.
         /// </summary>
-        public float LaneChangeDuration { get; init; } = 0.15f;
+        public float LaneChangeDuration { get; set; } = 0.15f;
 
         // --- Speed ------------------------------------------------------------------------
 
         /// <summary>Forward speed at the start of a run, in metres/second.</summary>
-        public float BaseSpeed { get; init; } = 9f;
+        public float BaseSpeed { get; set; } = 9f;
 
         /// <summary>
         /// Speed added per metre travelled. Linear acceleration is intentional: exponential
         /// curves feel great for 30 seconds and then become impossible, which caps session
         /// length and therefore caps ad impressions per session.
         /// </summary>
-        public float SpeedGainPerMetre { get; init; } = 0.012f;
+        public float SpeedGainPerMetre { get; set; } = 0.012f;
 
         /// <summary>
         /// Hard ceiling on forward speed. This exists for a concrete reason: obstacles are
@@ -46,57 +51,57 @@ namespace NeonRush.Domain.Run
         /// cannot see and react to them within human reaction time (~250 ms). Past that point
         /// deaths stop feeling earned and start feeling cheap, and players churn.
         /// </summary>
-        public float MaxSpeed { get; init; } = 26f;
+        public float MaxSpeed { get; set; } = 26f;
 
         // --- Jump and slide ---------------------------------------------------------------
 
         /// <summary>Initial vertical velocity of a jump, in metres/second.</summary>
-        public float JumpVelocity { get; init; } = 8.5f;
+        public float JumpVelocity { get; set; } = 8.5f;
 
         /// <summary>
         /// Downward acceleration, in m/s². Deliberately far stronger than Earth gravity (9.81):
         /// a realistic arc feels floaty and sluggish in a runner. Players want to come down fast
         /// so they can act again.
         /// </summary>
-        public float Gravity { get; init; } = 32f;
+        public float Gravity { get; set; } = 32f;
 
         /// <summary>How long a slide lasts, in seconds.</summary>
-        public float SlideDuration { get; init; } = 0.55f;
+        public float SlideDuration { get; set; } = 0.55f;
 
         /// <summary>Collider height while sliding, as a fraction of the standing height.</summary>
-        public float SlideHeightFactor { get; init; } = 0.45f;
+        public float SlideHeightFactor { get; set; } = 0.45f;
 
         // --- Scoring ----------------------------------------------------------------------
 
         /// <summary>Score awarded per metre travelled.</summary>
-        public float ScorePerMetre { get; init; } = 1f;
+        public float ScorePerMetre { get; set; } = 1f;
 
         /// <summary>Score awarded per coin, on top of the coin's currency value.</summary>
-        public int ScorePerCoin { get; init; } = 10;
+        public int ScorePerCoin { get; set; } = 10;
 
         // --- Track streaming --------------------------------------------------------------
 
         /// <summary>Length of one procedurally-spawned track chunk, in metres.</summary>
-        public float ChunkLength { get; init; } = 30f;
+        public float ChunkLength { get; set; } = 30f;
 
         /// <summary>
         /// How many chunks are live at once. Must be enough that the furthest chunk is spawned
         /// beyond the camera's far plane, or the player watches the world pop into existence.
         /// </summary>
-        public int ActiveChunks { get; init; } = 6;
+        public int ActiveChunks { get; set; } = 6;
 
         /// <summary>
         /// Metres behind the player at which a chunk is recycled back into the pool.
         /// Negative = behind the player.
         /// </summary>
-        public float ChunkDespawnZ { get; init; } = -20f;
+        public float ChunkDespawnZ { get; set; } = -20f;
 
         /// <summary>
         /// Distance the player runs before obstacles begin appearing. A grace period at the
         /// start of every run measurably improves early retention: dying in the first two
         /// seconds of a fresh install reads as "this game is unfair", not "I made a mistake".
         /// </summary>
-        public float SafeStartDistance { get; init; } = 40f;
+        public float SafeStartDistance { get; set; } = 40f;
 
         /// <summary>Validates the tuning and throws on values that would produce an unplayable run.</summary>
         public void Validate()
