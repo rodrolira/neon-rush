@@ -38,12 +38,14 @@ namespace NeonRush.Presentation.World
         private readonly TrackStreamer _track;
         private readonly PlayerMotor _player;
         private readonly RunSession _session;
+        private readonly float _chunkLength;
 
-        public CollisionSystem(TrackStreamer track, PlayerMotor player, RunSession session)
+        public CollisionSystem(TrackStreamer track, PlayerMotor player, RunSession session, float chunkLength)
         {
             _track = track;
             _player = player;
             _session = session;
+            _chunkLength = chunkLength;
         }
 
         /// <summary>
@@ -58,14 +60,7 @@ namespace NeonRush.Presentation.World
 
             foreach (var chunk in _track.ActiveChunks)
             {
-                // Cheap rejection: skip whole chunks that are nowhere near the player before
-                // touching any of their contents.
-                if (chunk.Z > TestWindow || chunk.Z + 30f < -TestWindow)
-                {
-                    // The chunk's own span is [Z, Z + chunkLength]. If that span cannot possibly
-                    // overlap the test window, none of its children can either.
-                    if (chunk.Z - TestWindow > 0f) continue;
-                }
+                if (IsOutsideTestWindow(chunk)) continue;
 
                 CollectCoins(chunk, playerBounds);
 
@@ -75,6 +70,22 @@ namespace NeonRush.Presentation.World
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// Rejects a whole chunk before touching any of its contents.
+        ///
+        /// A chunk spans [Z, Z + chunkLength] and the player sits at z = 0. If that span cannot
+        /// reach the test window, none of the chunk's children can either, so the entire chunk is
+        /// skipped with two float compares instead of iterating its obstacles and coins.
+        /// </summary>
+        private bool IsOutsideTestWindow(Chunk chunk)
+        {
+            var near = chunk.Z;
+            var far = chunk.Z + _chunkLength;
+
+            // Entirely ahead of the window, or entirely behind it.
+            return near > TestWindow || far < -TestWindow;
         }
 
         private void CollectCoins(Chunk chunk, Bounds playerBounds)

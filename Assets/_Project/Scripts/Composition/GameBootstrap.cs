@@ -121,7 +121,7 @@ namespace NeonRush.Composition
             var seed = _seed != 0 ? _seed : Environment.TickCount;
             _track = new TrackStreamer(_tuning, world, _materials, seed);
 
-            _collisions = new CollisionSystem(_track, _player, _session);
+            _collisions = new CollisionSystem(_track, _player, _session, _tuning.ChunkLength);
 
             // --- Camera ---------------------------------------------------------------------
             var cameraGo = new GameObject("MainCamera", typeof(Camera));

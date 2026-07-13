@@ -140,6 +140,12 @@ namespace NeonRush.Presentation.World
             var delta = speed * deltaTime;
             _distance += delta;
 
+            // The emit cursor lives in the same moving world as the chunks, so it must scroll with
+            // them. Leaving it fixed while the chunks slide backwards was a real bug: by the time
+            // the first chunk was recycled the world had moved ~50 m under a stationary cursor, so
+            // the replacement chunk was emitted 50 m too far ahead and tore a hole in the road.
+            _nextChunkZ -= delta;
+
             for (var i = _active.Count - 1; i >= 0; i--)
             {
                 var chunk = _active[i];

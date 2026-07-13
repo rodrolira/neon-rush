@@ -5,6 +5,7 @@
         "NeonRush.Core",
         "NeonRush.Domain",
         "NeonRush.Application",
+        "NeonRush.Presentation",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
