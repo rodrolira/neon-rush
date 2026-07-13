@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NeonRush.Presentation.Visuals;
 using UnityEngine;
 
 namespace NeonRush.Presentation.Pooling
@@ -127,10 +128,9 @@ namespace NeonRush.Presentation.Pooling
 
             foreach (var instance in _idle)
             {
-                if (instance != null)
-                {
-                    UnityEngine.Object.Destroy(instance);
-                }
+                // Play-mode-safe AND edit-mode-safe: Object.Destroy is refused outside play mode,
+                // which would make every EditMode test that touches a pool fail in teardown.
+                PrimitiveFactory.Destroy(instance);
             }
 
             _idle.Clear();

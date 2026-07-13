@@ -103,10 +103,7 @@ namespace NeonRush.Presentation.Visuals
         {
             foreach (var material in _cache.Values)
             {
-                if (material != null)
-                {
-                    UnityEngine.Object.Destroy(material);
-                }
+                PrimitiveFactory.Destroy(material);
             }
 
             _cache.Clear();

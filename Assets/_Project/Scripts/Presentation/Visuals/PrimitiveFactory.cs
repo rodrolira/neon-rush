@@ -60,8 +60,6 @@ namespace NeonRush.Presentation.Visuals
 
         /// <summary>
         /// Removes the collider Unity attaches to every primitive.
-        /// Destroy (not DestroyImmediate) because this runs at play time; DestroyImmediate on a
-        /// live object is an Editor-only operation and Unity warns about it in a build.
         /// </summary>
         private static void StripCollider(GameObject go)
         {
@@ -69,13 +67,29 @@ namespace NeonRush.Presentation.Visuals
 
             if (collider == null) return;
 
+            Destroy(collider);
+        }
+
+        /// <summary>
+        /// Destroys a Unity object correctly in both play mode and edit mode.
+        ///
+        /// This is not a convenience wrapper — it is required. <c>Object.Destroy</c> defers the
+        /// kill to the end of the frame, and outside play mode there is no frame, so Unity refuses
+        /// it outright with "Destroy may not be called from edit mode". Any code that can run
+        /// under an EditMode test or an editor tool (which is all of the pooling and materials
+        /// code here) has to branch, or it throws the moment it is tested.
+        /// </summary>
+        public static void Destroy(Object target)
+        {
+            if (target == null) return;
+
             if (UnityEngine.Application.isPlaying)
             {
-                Object.Destroy(collider);
+                Object.Destroy(target);
             }
             else
             {
-                Object.DestroyImmediate(collider);
+                Object.DestroyImmediate(target);
             }
         }
 
