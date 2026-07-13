@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using NeonRush.Domain.Ports;
@@ -281,6 +282,8 @@ namespace NeonRush.Infrastructure.Save
             public int bestScore;
             public int totalRuns;
             public long totalDistance;
+            public string[] ownedItems;
+            public bool adsRemoved;
 
             /// <summary>DateTime as UTC ticks: JsonUtility cannot serialise DateTime, and ticks are unambiguous across time zones.</summary>
             public long savedAtUtcTicks;
@@ -293,6 +296,8 @@ namespace NeonRush.Infrastructure.Save
                 bestScore = data.BestScore,
                 totalRuns = data.TotalRuns,
                 totalDistance = data.TotalDistance,
+                ownedItems = data.OwnedItems?.ToArray() ?? Array.Empty<string>(),
+                adsRemoved = data.AdsRemoved,
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
 
@@ -304,6 +309,15 @@ namespace NeonRush.Infrastructure.Save
                 BestScore = Math.Max(0, bestScore),
                 TotalRuns = Math.Max(0, totalRuns),
                 TotalDistance = Math.Max(0, totalDistance),
+
+                // A save written by an older build has no ownedItems array at all, and JsonUtility
+                // leaves it null rather than empty. Every field read here must tolerate its own
+                // absence — that is what makes a schema migration possible instead of a crash.
+                OwnedItems = ownedItems != null
+                    ? new System.Collections.Generic.List<string>(ownedItems)
+                    : new System.Collections.Generic.List<string>(),
+
+                AdsRemoved = adsRemoved,
 
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save

@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using NeonRush.Application.Events;
 using NeonRush.Application.Progression;
+using NeonRush.Application.Store;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Economy;
+using NeonRush.Domain.Inventory;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Save;
 
@@ -44,24 +46,50 @@ namespace NeonRush.Application.Save
         private readonly ISaveStore _store;
         private readonly Wallet _wallet;
         private readonly PlayerProfile _profile;
+        private readonly Inventory _inventory;
         private readonly IClock _clock;
         private readonly List<IDisposable> _subscriptions = new();
 
         private bool _dirty;
         private float _sinceLastWrite;
 
-        public SaveService(ISaveStore store, Wallet wallet, PlayerProfile profile, IEventBus bus, IClock clock)
+        /// <summary>Set once ad removal is bought. Persisted so it survives a reinstall.</summary>
+        private bool _adsRemoved;
+
+        public SaveService(
+            ISaveStore store,
+            Wallet wallet,
+            PlayerProfile profile,
+            Inventory inventory,
+            IEventBus bus,
+            IClock clock,
+            bool adsRemoved = false)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _wallet = wallet ?? throw new ArgumentNullException(nameof(wallet));
             _profile = profile ?? throw new ArgumentNullException(nameof(profile));
+            _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
             _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+            _adsRemoved = adsRemoved;
 
             if (bus == null) throw new ArgumentNullException(nameof(bus));
 
             _subscriptions.Add(bus.Subscribe<CurrencyChanged>(_ => MarkDirty()));
             _subscriptions.Add(bus.Subscribe<RunEnded>(_ => MarkDirty()));
+
+            // A purchase must reach the disk. An item the player PAID for that is lost because the
+            // app was killed before the next debounce tick is a refund request and a lost customer.
+            _subscriptions.Add(bus.Subscribe<ItemGranted>(_ => Flush()));
+
+            _subscriptions.Add(bus.Subscribe<PurchaseCompleted>(e =>
+            {
+                if (e.ItemId == AdRemovalItemId) _adsRemoved = true;
+                Flush();
+            }));
         }
+
+        /// <summary>The catalogue id of the ad-removal product.</summary>
+        public const string AdRemovalItemId = "no_ads";
 
         /// <summary>Number of writes actually committed. Exposed for tests and for the debug overlay.</summary>
         public int WritesCommitted { get; private set; }
@@ -120,6 +148,9 @@ namespace NeonRush.Application.Save
 
             data.Coins = _wallet.Balance(CurrencyType.Coins);
             data.Gems = _wallet.Balance(CurrencyType.Gems);
+
+            data.OwnedItems = new List<string>(_inventory.Owned);
+            data.AdsRemoved = _adsRemoved;
 
             _profile.WriteTo(data);
 

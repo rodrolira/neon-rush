@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace NeonRush.Domain.Save
 {
@@ -40,6 +41,19 @@ namespace NeonRush.Domain.Save
         public long TotalDistance { get; set; }
 
         /// <summary>
+        /// Item ids the player owns.
+        ///
+        /// This is the most valuable field in the file — it is what they PAID for. It is also the one
+        /// that must never be lost, which is why the cloud merge is a union and never a replace (see
+        /// Inventory.MergeFromServer). Taking away a purchased item is the fastest route to a
+        /// chargeback.
+        /// </summary>
+        public List<string> OwnedItems { get; set; } = new();
+
+        /// <summary>True once the player has bought ad removal.</summary>
+        public bool AdsRemoved { get; set; }
+
+        /// <summary>
         /// When this file was written, in UTC, according to the trusted clock (<see cref="Ports.IClock"/>).
         ///
         /// Used for cloud-save conflict resolution: when the device and the cloud disagree, the
@@ -57,6 +71,11 @@ namespace NeonRush.Domain.Save
             TotalRuns = TotalRuns,
             TotalDistance = TotalDistance,
             SavedAtUtc = SavedAtUtc,
+
+            // A deep copy. Sharing the list would let a caller mutate the "stored" save without
+            // writing it — which is exactly the class of bug Clone() exists to prevent.
+            OwnedItems = new List<string>(OwnedItems),
+            AdsRemoved = AdsRemoved,
         };
 
         /// <summary>A fresh profile. This is what a brand-new install loads.</summary>
@@ -69,6 +88,8 @@ namespace NeonRush.Domain.Save
             TotalRuns = 0,
             TotalDistance = 0,
             SavedAtUtc = DateTime.MinValue,
+            OwnedItems = new List<string>(),
+            AdsRemoved = false,
         };
     }
 

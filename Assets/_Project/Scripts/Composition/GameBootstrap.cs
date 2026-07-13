@@ -6,14 +6,18 @@ using NeonRush.Application.Progression;
 using NeonRush.Application.Run;
 using NeonRush.Application.Save;
 using NeonRush.Application.States;
+using NeonRush.Application.Store;
 using NeonRush.Core.DI;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Ads;
 using NeonRush.Domain.Economy;
+using NeonRush.Domain.Inventory;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Run;
 using NeonRush.Domain.Save;
+using NeonRush.Domain.Store;
 using NeonRush.Infrastructure.Ads;
+using NeonRush.Infrastructure.Iap;
 using NeonRush.Infrastructure.Save;
 using NeonRush.Infrastructure.Time;
 using NeonRush.Presentation.Input;
@@ -69,6 +73,9 @@ namespace NeonRush.Composition
         private PlayerProfile _profile;
         private SaveService _save;
         private AdDirector _adDirector;
+        private Inventory _inventory;
+        private StoreCatalog _catalog;
+        private StoreService _store;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -132,10 +139,13 @@ namespace NeonRush.Composition
             _profile = new PlayerProfile(_bus, loaded.Data);
             _container.RegisterInstance(_profile);
 
+            _inventory = new Inventory(_bus, loaded.Data.OwnedItems);
+            _container.RegisterInstance(_inventory);
+
             _rewards = new RunRewardService(_wallet, _bus);
             _container.RegisterInstance(_rewards);
 
-            _save = new SaveService(store, _wallet, _profile, _bus, clock);
+            _save = new SaveService(store, _wallet, _profile, _inventory, _bus, clock, loaded.Data.AdsRemoved);
             _container.RegisterInstance(_save);
 
             // --- Ads ------------------------------------------------------------------------
@@ -153,8 +163,36 @@ namespace NeonRush.Composition
             var adPolicy = new AdPolicy(new AdPolicyConfig(), clock);
             _container.RegisterInstance(adPolicy);
 
+            // A player who bought ad removal must not see an interstitial on the very first run after
+            // a reinstall, before any server sync has happened. The entitlement is restored from the
+            // local save immediately.
+            if (loaded.Data.AdsRemoved)
+            {
+                ads.DisableInterstitials();
+                adPolicy.DisableInterstitials();
+            }
+
             _adDirector = new AdDirector(ads, adPolicy, _rewards, _profile, _bus);
             _container.RegisterInstance(_adDirector);
+
+            // --- Store ----------------------------------------------------------------------
+            //
+            // The receipt validator is the security boundary of the whole economy. DevReceiptValidator
+            // approves everything, and it contains a hard guard that REFUSES to run in a release
+            // build — so shipping it by accident fails purchases loudly instead of silently minting
+            // currency for anyone who asks. Bind ServerReceiptValidator once the Cloud Function
+            // exists; see Infrastructure/Iap/ReceiptValidators.cs.
+            IIapService iap = new SimulatedIapService();
+            IReceiptValidator validator = new DevReceiptValidator();
+
+            _container.RegisterInstance(iap);
+            _container.RegisterInstance(validator);
+
+            _catalog = StoreCatalog.Default();
+            _container.RegisterInstance(_catalog);
+
+            _store = new StoreService(_catalog, _wallet, _inventory, iap, validator, ads, _bus);
+            _container.RegisterInstance(_store);
 
             BuildScene();
 
