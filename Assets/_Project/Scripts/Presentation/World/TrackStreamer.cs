@@ -169,6 +169,39 @@ namespace NeonRush.Presentation.World
             {
                 Emit();
             }
+
+            SpinCoins(deltaTime);
+        }
+
+        /// <summary>Degrees per second a coin rotates about the vertical axis.</summary>
+        private const float CoinSpinSpeed = 180f;
+
+        /// <summary>
+        /// Spins the coins.
+        ///
+        /// This is not decoration. A static gold disc reads as scenery; a spinning one reads as
+        /// *collectable*, and the player's eye tracks it without being told to. It is the cheapest
+        /// possible way to teach the player what to run toward.
+        ///
+        /// Cost is a rotation on the ~90 coins currently in the world — trivial, and it happens
+        /// inside the loop the streamer already runs, so it costs no extra iteration.
+        /// </summary>
+        private void SpinCoins(float deltaTime)
+        {
+            var degrees = CoinSpinSpeed * deltaTime;
+
+            for (var c = 0; c < _active.Count; c++)
+            {
+                var coins = _active[c].Coins;
+
+                for (var i = 0; i < coins.Count; i++)
+                {
+                    var coin = coins[i];
+                    if (coin == null) continue; // Already collected this pass.
+
+                    coin.transform.Rotate(Vector3.up, degrees, Space.World);
+                }
+            }
         }
 
         /// <summary>Marks a coin as taken and returns it to the pool.</summary>

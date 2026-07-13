@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NeonRush.Application.Events;
 using NeonRush.Application.Run;
 using NeonRush.Core.Events;
+using NeonRush.Domain.Economy;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,6 +33,7 @@ namespace NeonRush.Presentation.View
         private Text _score;
         private Text _coins;
         private Text _distance;
+        private Text _bank;
         private GameObject _gameOverPanel;
         private Text _gameOverText;
 
@@ -40,7 +42,7 @@ namespace NeonRush.Presentation.View
         private int _lastCoins = -1;
         private int _lastDistance = -1;
 
-        public RunHud(RunSession session, IEventBus bus, Transform uiRoot)
+        public RunHud(RunSession session, IEventBus bus, Transform uiRoot, Wallet wallet)
         {
             _session = session;
 
@@ -48,7 +50,22 @@ namespace NeonRush.Presentation.View
 
             _subscriptions.Add(bus.Subscribe<RunEnded>(OnRunEnded));
             _subscriptions.Add(bus.Subscribe<RunStarted>(OnRunStarted));
+
+            // The bank is event-driven rather than polled: it changes a handful of times per session,
+            // so rewriting it every frame would dirty the Canvas and force a UI rebuild for nothing.
+            _subscriptions.Add(bus.Subscribe<CurrencyChanged>(OnCurrencyChanged));
+
+            SetBank(wallet.Balance(CurrencyType.Coins));
         }
+
+        private void OnCurrencyChanged(CurrencyChanged e)
+        {
+            if (e.Currency != CurrencyType.Coins) return;
+
+            SetBank(e.Balance);
+        }
+
+        private void SetBank(int balance) => _bank.text = $"BANK  {balance:N0}";
 
         /// <summary>Refreshes the live counters. Called once per frame from the game loop.</summary>
         public void Tick()
@@ -86,10 +103,14 @@ namespace NeonRush.Presentation.View
         private void OnRunEnded(RunEnded e)
         {
             _gameOverPanel.SetActive(true);
+
+            // The coins are already in the bank by the time this renders — RunRewardService credits
+            // them the instant the run ends, before any offer. That is deliberate; see the note in
+            // RunRewardService about never holding earned coins hostage behind an ad.
             _gameOverText.text =
                 $"RUN OVER\n\n" +
                 $"{(int)e.DistanceMetres:N0} m\n" +
-                $"{e.CoinsCollected:N0} coins\n" +
+                $"+{e.CoinsCollected:N0} coins banked\n" +
                 $"score {e.Score:N0}\n\n" +
                 $"tap to run again";
         }
@@ -114,6 +135,7 @@ namespace NeonRush.Presentation.View
             _score = Label(canvasGo.transform, "Score", new Vector2(0f, 1f), new Vector2(40f, -40f), TextAnchor.UpperLeft, 44);
             _coins = Label(canvasGo.transform, "Coins", new Vector2(0f, 1f), new Vector2(40f, -100f), TextAnchor.UpperLeft, 44);
             _distance = Label(canvasGo.transform, "Distance", new Vector2(1f, 1f), new Vector2(-40f, -40f), TextAnchor.UpperRight, 44);
+            _bank = Label(canvasGo.transform, "Bank", new Vector2(1f, 1f), new Vector2(-40f, -100f), TextAnchor.UpperRight, 44);
 
             BuildGameOverPanel(canvasGo.transform);
         }

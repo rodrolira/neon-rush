@@ -1,9 +1,11 @@
 using System;
+using NeonRush.Application.Economy;
 using NeonRush.Application.Events;
 using NeonRush.Application.Run;
 using NeonRush.Application.States;
 using NeonRush.Core.DI;
 using NeonRush.Core.Events;
+using NeonRush.Domain.Economy;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Run;
 using NeonRush.Infrastructure.Time;
@@ -46,6 +48,8 @@ namespace NeonRush.Composition
         private GameStateMachine _states;
         private RunSession _session;
         private RunTuning _tuning;
+        private Wallet _wallet;
+        private RunRewardService _rewards;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -80,6 +84,16 @@ namespace NeonRush.Composition
 
             _session = new RunSession(_tuning, _bus);
             _container.RegisterInstance(_session);
+
+            // The wallet is a local prediction of a server-authoritative balance (ARCHITECTURE.md §8).
+            // It starts empty; persistence and cloud sync land in the next phase. Right now its job
+            // is to prove the economy plumbing end to end: coins picked up in a run are banked when
+            // the run ends, and the HUD reflects it.
+            _wallet = new Wallet(_bus);
+            _container.RegisterInstance(_wallet);
+
+            _rewards = new RunRewardService(_wallet, _bus);
+            _container.RegisterInstance(_rewards);
 
             BuildScene();
 
@@ -138,7 +152,7 @@ namespace NeonRush.Composition
             // extra metre is geometry the GPU considers and then discards.
             camera.farClipPlane = _tuning.ChunkLength * (_tuning.ActiveChunks + 1);
 
-            _camera = new RunCameraRig(cameraGo.transform, playerPivot);
+            _camera = new RunCameraRig(cameraGo.transform, playerPivot, camera);
 
             // --- Lighting -------------------------------------------------------------------
             var lightGo = new GameObject("KeyLight", typeof(Light));
@@ -162,7 +176,7 @@ namespace NeonRush.Composition
             var uiRoot = new GameObject("UI").transform;
             uiRoot.SetParent(transform, worldPositionStays: false);
 
-            _hud = new RunHud(_session, _bus, uiRoot);
+            _hud = new RunHud(_session, _bus, uiRoot, _wallet);
 
             _input = new SwipeInput();
         }
@@ -197,6 +211,13 @@ namespace NeonRush.Composition
         private void OnRunEnded(RunEnded e)
         {
             _states.TransitionTo(GameState.GameOver);
+
+            // Only a crash shakes the camera. Quitting deliberately is not an impact, and shaking
+            // the screen at a player who chose to leave is noise pretending to be feedback.
+            if (e.Cause == DeathCause.HitObstacle)
+            {
+                _camera.Shake();
+            }
 
             _awaitingRestart = true;
 
@@ -233,7 +254,7 @@ namespace NeonRush.Composition
                     break;
 
                 case GameState.GameOver:
-                    TickGameOver(command);
+                    TickGameOver(deltaTime, command);
                     break;
 
                 case GameState.Boot:
@@ -264,12 +285,26 @@ namespace NeonRush.Composition
             _session.Tick(deltaTime);
             _track.Tick(deltaTime, _session.Speed);
             _collisions.Tick();
-            _camera.Tick(deltaTime);
+            _camera.Tick(deltaTime, NormalisedSpeed);
             _hud.Tick();
         }
 
-        private void TickGameOver(SwipeCommand command)
+        /// <summary>0 at base speed, 1 at the speed cap. Drives the camera's speed-FOV.</summary>
+        private float NormalisedSpeed
         {
+            get
+            {
+                var range = _tuning.MaxSpeed - _tuning.BaseSpeed;
+                return range <= 0f ? 0f : Mathf.Clamp01((_session.Speed - _tuning.BaseSpeed) / range);
+            }
+        }
+
+        private void TickGameOver(float deltaTime, SwipeCommand command)
+        {
+            // The camera keeps ticking after death so the impact shake can actually play out. A
+            // shake that is started and then never advanced is just a frozen, crooked camera.
+            _camera.Tick(deltaTime, NormalisedSpeed);
+
             if (!_awaitingRestart) return;
             if (Time.unscaledTime < _restartArmedAt) return;
 
@@ -299,6 +334,7 @@ namespace NeonRush.Composition
             // shows up as a second HUD reacting to the next run.
             _runEndedSubscription?.Dispose();
 
+            _rewards?.Dispose();
             _hud?.Dispose();
             _track?.Dispose();
             _materials?.Dispose();

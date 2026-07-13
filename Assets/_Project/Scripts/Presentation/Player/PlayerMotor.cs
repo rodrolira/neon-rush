@@ -90,13 +90,20 @@ namespace NeonRush.Presentation.Player
             _verticalVelocity = 0f;
             _height = 0f;
             _slideRemaining = 0f;
+            _buffered = SwipeCommand.None;
+            _time = 0f;
+            _lean = 0f;
+            _previousX = 0f;
 
             _transform.localPosition = Vector3.zero;
+            _transform.localRotation = Quaternion.identity;
         }
 
         /// <summary>Advances the player by one frame.</summary>
         public void Tick(float deltaTime, SwipeCommand command)
         {
+            _time += deltaTime;
+
             ApplyCommand(command);
             TickLane(deltaTime);
             TickVertical(deltaTime);
@@ -108,31 +115,114 @@ namespace NeonRush.Presentation.Player
                 Smooth(_laneBlend));
 
             _transform.localPosition = new Vector3(x, _height, 0f);
+
+            TickLean(deltaTime, x);
         }
 
+        // -------------------------------------------------------------------------------
+        // Input buffering
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// How long an unusable command is remembered, in seconds.
+        ///
+        /// This is the single highest-leverage feel setting in the game. Without it, a player who
+        /// swipes down a few frames before landing gets *nothing* — the input arrives while they
+        /// are airborne, the slide is refused, and the command evaporates. They do not experience
+        /// that as "I was slightly early". They experience it as "I swiped and the game ignored
+        /// me", and then they die and blame the controls.
+        ///
+        /// 0.15s is roughly the window a human perceives as "the same moment". Much longer and
+        /// stale inputs start firing after the player has changed their mind, which feels equally
+        /// broken in the opposite direction.
+        /// </summary>
+        private const float BufferWindow = 0.15f;
+
+        private SwipeCommand _buffered;
+        private float _bufferExpiry;
+        private float _time;
+
         private void ApplyCommand(SwipeCommand command)
+        {
+            if (command != SwipeCommand.None)
+            {
+                // A fresh command always supersedes a buffered one. If the player swiped up and
+                // then immediately swiped left, they want to go left; replaying the stale jump
+                // afterwards would be the game overriding a decision they already changed.
+                if (TryExecute(command, fresh: true))
+                {
+                    _buffered = SwipeCommand.None;
+                }
+                else
+                {
+                    _buffered = command;
+                    _bufferExpiry = _time + BufferWindow;
+                }
+
+                return;
+            }
+
+            if (_buffered == SwipeCommand.None) return;
+
+            if (_time > _bufferExpiry)
+            {
+                _buffered = SwipeCommand.None;
+                return;
+            }
+
+            if (TryExecute(_buffered, fresh: false))
+            {
+                _buffered = SwipeCommand.None;
+            }
+        }
+
+        /// <summary>
+        /// Attempts a command. Returns true when it was consumed (acted on, or legitimately
+        /// discarded); false when it could not be honoured yet and should be buffered.
+        /// </summary>
+        /// <param name="fresh">
+        /// True on the frame the player actually swiped. Some effects — the airborne fast-fall —
+        /// must fire once on the real input and never again as the buffered retry replays.
+        /// </param>
+        private bool TryExecute(SwipeCommand command, bool fresh)
         {
             switch (command)
             {
                 case SwipeCommand.Left:
                     TryChangeLane(-1);
-                    break;
+                    // Consumed even at the edge of the track. Buffering an edge-blocked swipe would
+                    // fire it later, moving the player into a lane they asked for a moment ago and
+                    // no longer want — a surprise lane change is worse than a missed one.
+                    return true;
 
                 case SwipeCommand.Right:
                     TryChangeLane(1);
-                    break;
+                    return true;
 
                 case SwipeCommand.Up:
+                    if (!IsGrounded) return false; // Airborne: buffer it, jump the instant we land.
+
                     TryJump();
-                    break;
+                    return true;
 
                 case SwipeCommand.Down:
-                    TrySlide();
-                    break;
+                    if (IsGrounded)
+                    {
+                        TrySlide();
+                        return true;
+                    }
+
+                    // Airborne. The swipe means two things at once: "come down now" and "slide when
+                    // I get there". Fire the fast-fall on the real input only, then buffer the slide
+                    // so the player lands already sliding — which is what they intended and what
+                    // makes jump-then-slide sequences possible at speed.
+                    if (fresh) FastFall();
+
+                    return false;
 
                 case SwipeCommand.None:
                 default:
-                    break;
+                    return true;
             }
         }
 
@@ -183,18 +273,22 @@ namespace NeonRush.Presentation.Player
         private void TrySlide()
         {
             if (IsSliding) return;
-
-            if (!IsGrounded)
-            {
-                // Swipe-down in the air is a fast-fall, not a slide. This is a small thing that
-                // players notice immediately: without it, jumping over one obstacle and needing to
-                // slide under the next feels impossible, because you are stuck floating.
-                _verticalVelocity = -_tuning.JumpVelocity;
-                return;
-            }
+            if (!IsGrounded) return; // Airborne slides are handled by the buffer; see TryExecute.
 
             _slideRemaining = _tuning.SlideDuration;
             _bus.Publish(new PlayerSlid());
+        }
+
+        /// <summary>
+        /// Drives the player back to the ground immediately.
+        ///
+        /// Without this, a jump commits the player to a fixed ~0.53s arc. Jump over one obstacle,
+        /// find a barrier you must slide under right behind it, and you are stuck floating with no
+        /// legal move. A runner must never take away the player's last option.
+        /// </summary>
+        private void FastFall()
+        {
+            _verticalVelocity = -_tuning.JumpVelocity;
         }
 
         private void TickLane(float deltaTime)
@@ -236,6 +330,53 @@ namespace NeonRush.Presentation.Player
             _slideRemaining -= deltaTime;
 
             if (_slideRemaining < 0f) _slideRemaining = 0f;
+        }
+
+        // -------------------------------------------------------------------------------
+        // Lean
+        // -------------------------------------------------------------------------------
+
+        /// <summary>Maximum body roll during a lane change, in degrees.</summary>
+        private const float MaxLean = 18f;
+
+        /// <summary>Degrees of roll per metre/second of lateral velocity.</summary>
+        private const float LeanPerLateralSpeed = 1.4f;
+
+        /// <summary>How fast the lean settles. Higher = snappier.</summary>
+        private const float LeanSharpness = 14f;
+
+        private float _lean;
+        private float _previousX;
+
+        /// <summary>
+        /// Rolls the player into their lane change, proportional to how fast they are actually
+        /// moving sideways.
+        ///
+        /// This is pure presentation and it is worth stating why it earns its keep: the lane change
+        /// itself takes 0.15s, which is too fast to read as motion. Without a lean the player just
+        /// *appears* in the next lane. The roll is what tells the eye that a movement happened and
+        /// which direction it went.
+        ///
+        /// It does NOT affect the hitbox: <see cref="Bounds"/> is derived from position only, never
+        /// from rotation. A player can never be killed by leaning into an obstacle they did not
+        /// actually touch.
+        /// </summary>
+        private void TickLean(float deltaTime, float x)
+        {
+            if (deltaTime <= 0f) return;
+
+            var lateralVelocity = (x - _previousX) / deltaTime;
+            _previousX = x;
+
+            var target = Mathf.Clamp(lateralVelocity * LeanPerLateralSpeed, -MaxLean, MaxLean);
+
+            // Framerate-independent smoothing (see RunCameraRig for why the naive Lerp is wrong).
+            var t = 1f - Mathf.Exp(-LeanSharpness * deltaTime);
+            _lean = Mathf.Lerp(_lean, target, t);
+
+            // Negated: moving right (+x) should roll the body to the right, which is -Z in Unity's
+            // left-handed rotation about the forward axis.
+            _transform.localRotation = Quaternion.Euler(0f, 0f, -_lean);
         }
 
         /// <summary>
