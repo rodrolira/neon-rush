@@ -1,13 +1,17 @@
 using System;
 using NeonRush.Application.Economy;
 using NeonRush.Application.Events;
+using NeonRush.Application.Progression;
 using NeonRush.Application.Run;
+using NeonRush.Application.Save;
 using NeonRush.Application.States;
 using NeonRush.Core.DI;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Economy;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Run;
+using NeonRush.Domain.Save;
+using NeonRush.Infrastructure.Save;
 using NeonRush.Infrastructure.Time;
 using NeonRush.Presentation.Input;
 using NeonRush.Presentation.Player;
@@ -50,6 +54,8 @@ namespace NeonRush.Composition
         private RunTuning _tuning;
         private Wallet _wallet;
         private RunRewardService _rewards;
+        private PlayerProfile _profile;
+        private SaveService _save;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -76,24 +82,48 @@ namespace NeonRush.Composition
             _bus = new EventBus();
             _states = new GameStateMachine();
 
+            var clock = new SystemClock();
+
             _container = new Container();
             _container.RegisterInstance<IEventBus>(_bus);
-            _container.RegisterInstance<IClock>(new SystemClock());
+            _container.RegisterInstance<IClock>(clock);
             _container.RegisterInstance(_tuning);
             _container.RegisterInstance(_states);
 
             _session = new RunSession(_tuning, _bus);
             _container.RegisterInstance(_session);
 
+            // --- Persistence ----------------------------------------------------------------
+            //
+            // Load BEFORE anything that owns player state is constructed, so the wallet and profile
+            // are born holding the real values rather than being zeroed and then patched. Patching
+            // afterwards would publish a spurious CurrencyChanged on boot, and the HUD would animate
+            // the player's balance up from zero every single launch.
+            ISaveStore store = FileSaveStore.Default();
+            _container.RegisterInstance(store);
+
+            var loaded = store.Load();
+
+            if (!loaded.Restored && loaded.Failure != LoadFailure.NotFound)
+            {
+                // A real load failure, not a fresh install. The player is about to lose progress, so
+                // this must be loud — and in the shipping game it goes to Crashlytics, not just the
+                // console, because we need to know how often it happens in the wild.
+                Debug.LogError($"[NeonRush] Save could not be restored: {loaded.Failure}. Starting a fresh profile.");
+            }
+
             // The wallet is a local prediction of a server-authoritative balance (ARCHITECTURE.md §8).
-            // It starts empty; persistence and cloud sync land in the next phase. Right now its job
-            // is to prove the economy plumbing end to end: coins picked up in a run are banked when
-            // the run ends, and the HUD reflects it.
-            _wallet = new Wallet(_bus);
+            _wallet = new Wallet(_bus, loaded.Data.Coins, loaded.Data.Gems);
             _container.RegisterInstance(_wallet);
+
+            _profile = new PlayerProfile(_bus, loaded.Data);
+            _container.RegisterInstance(_profile);
 
             _rewards = new RunRewardService(_wallet, _bus);
             _container.RegisterInstance(_rewards);
+
+            _save = new SaveService(store, _wallet, _profile, _bus, clock);
+            _container.RegisterInstance(_save);
 
             BuildScene();
 
@@ -242,10 +272,40 @@ namespace NeonRush.Composition
 
         private const float RestartArmDelay = 0.35f;
 
+        /// <summary>
+        /// The app is going to the background (or coming back).
+        ///
+        /// This is the single most important line of persistence code in the project. Android and
+        /// iOS terminate backgrounded apps whenever they feel like it, with no further warning and
+        /// without running another line of our code. <c>OnApplicationPause(true)</c> is the last
+        /// moment we are guaranteed to execute — so the write happens here, synchronously. Anything
+        /// deferred past this point may simply never run, and the player loses their session.
+        /// </summary>
+        private void OnApplicationPause(bool paused)
+        {
+            if (!paused) return;
+
+            _save?.Flush();
+        }
+
+        /// <summary>
+        /// A clean exit. Reached on desktop and sometimes on mobile — but never rely on it there,
+        /// which is why <see cref="OnApplicationPause"/> carries the real weight.
+        /// </summary>
+        private void OnApplicationQuit()
+        {
+            _save?.Flush();
+        }
+
         private void Update()
         {
             var deltaTime = Time.deltaTime;
             var command = _input.Poll();
+
+            // Outside the switch: the debounced save must keep ticking regardless of game state.
+            // A player sitting on the game-over screen with unsaved coins is exactly the player
+            // most likely to background the app and never come back.
+            _save.Tick(deltaTime);
 
             switch (_states.Current)
             {
@@ -334,6 +394,11 @@ namespace NeonRush.Composition
             // shows up as a second HUD reacting to the next run.
             _runEndedSubscription?.Dispose();
 
+            // SaveService.Dispose flushes on the way out, so it must run before the wallet and the
+            // bus it reads from are torn down.
+            _save?.Dispose();
+
+            _profile?.Dispose();
             _rewards?.Dispose();
             _hud?.Dispose();
             _track?.Dispose();
