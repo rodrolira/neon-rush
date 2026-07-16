@@ -81,3 +81,5 @@ secrets.env
 .env.*
 !.env.example
 /[Aa]ssets/[Rr]esources/LocalSecrets.asset
+
+graphify-out

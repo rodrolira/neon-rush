@@ -195,12 +195,52 @@ namespace NeonRush.Presentation.View
             // The panel must not eat the tap that restarts the run.
             image.raycastTarget = false;
 
-            _gameOverText = Label(_gameOverPanel.transform, "GameOverText", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 56);
+            _gameOverText = Label(_gameOverPanel.transform, "GameOverText", new Vector2(0.5f, 0.5f), new Vector2(0f, 60f), TextAnchor.MiddleCenter, 56);
             var textRect = _gameOverText.GetComponent<RectTransform>();
             textRect.sizeDelta = new Vector2(900f, 900f);
 
+            BuildShopButton(_gameOverPanel.transform);
+
             _gameOverPanel.SetActive(false);
         }
+
+        /// <summary>
+        /// The SHOP button on the death screen.
+        ///
+        /// Between-runs is the natural spend moment in a runner — the player has just seen their
+        /// score, they know what a revive or a better board would have been worth, and they are not
+        /// mid-action. Putting the store here rather than behind a menu is a deliberate, well-worn
+        /// monetisation pattern.
+        /// </summary>
+        private void BuildShopButton(Transform parent)
+        {
+            var go = new GameObject("ShopButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, worldPositionStays: false);
+
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(360f, 100f);
+            rect.anchoredPosition = new Vector2(0f, 220f);
+
+            go.GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.85f);
+
+            var button = go.GetComponent<Button>();
+            button.onClick.AddListener(() => ShopRequested?.Invoke());
+
+            var label = Label(go.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 38);
+            label.text = "SHOP";
+            label.color = Color.white;
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+        }
+
+        /// <summary>Raised when the player taps SHOP on the death screen. The composition root opens the store.</summary>
+        public event Action ShopRequested;
 
         private static Text Label(Transform parent, string name, Vector2 anchor, Vector2 offset, TextAnchor alignment, int size)
         {

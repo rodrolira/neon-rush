@@ -26,6 +26,8 @@ using NeonRush.Presentation.View;
 using NeonRush.Presentation.Visuals;
 using NeonRush.Presentation.World;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 
 namespace NeonRush.Composition
 {
@@ -76,6 +78,7 @@ namespace NeonRush.Composition
         private Inventory _inventory;
         private StoreCatalog _catalog;
         private StoreService _store;
+        private StoreScreen _storeScreen;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -275,9 +278,40 @@ namespace NeonRush.Composition
             var uiRoot = new GameObject("UI").transform;
             uiRoot.SetParent(transform, worldPositionStays: false);
 
+            EnsureEventSystem(uiRoot);
+
             _hud = new RunHud(_session, _bus, uiRoot, _wallet, _adDirector);
 
+            _storeScreen = new StoreScreen(_catalog, _store, _wallet, _inventory, /*iap*/ ResolveIap(), _bus, uiRoot);
+
+            // The SHOP button lives on the death screen (the natural spend moment); tapping it opens
+            // the store overlay. The store closes itself via its own CLOSE button.
+            _hud.ShopRequested += () => _storeScreen.Show();
+
             _input = new SwipeInput();
+        }
+
+        private IIapService ResolveIap() => _container.Resolve<IIapService>();
+
+        /// <summary>
+        /// Creates the UI EventSystem, if the scene has none.
+        ///
+        /// This is required for a single, easily-missed reason: the project uses the new Input System
+        /// package, and the classic <c>StandaloneInputModule</c> silently does nothing under it. UI
+        /// buttons would render but never receive a click, and the bug looks like "my button is
+        /// broken" rather than "the input module is wrong". The store is the first screen with real
+        /// buttons, so this is where the EventSystem earns its place.
+        /// </summary>
+        private static void EnsureEventSystem(Transform parent)
+        {
+            if (EventSystem.current != null) return;
+
+            var go = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+            go.transform.SetParent(parent, worldPositionStays: false);
+
+            // Without default actions the module initialises but routes nothing. AssignDefaultActions
+            // wires up point/click/scroll so buttons work with no hand-authored input asset.
+            go.GetComponent<InputSystemUIInputModule>().AssignDefaultActions();
         }
 
         /// <summary>
@@ -436,6 +470,11 @@ namespace NeonRush.Composition
 
             if (!_awaitingRestart) return;
             if (_adDirector.IsAdInFlight) return;
+
+            // While the store overlay is up, the death-screen gestures are suspended entirely. A
+            // swipe meant to scroll the shop must never also revive or restart the run behind it.
+            if (_storeScreen.IsOpen) return;
+
             if (Time.unscaledTime < _restartArmedAt) return;
 
             // Swipe up = revive (watch an ad). Deliberately a distinct gesture from the tap that
@@ -456,11 +495,19 @@ namespace NeonRush.Composition
                 return;
             }
 
+            // A tap that landed on a UI button (the SHOP button) must not ALSO restart the run. The
+            // EventSystem routes the click to the button; this check stops the same tap from being
+            // read a second time as "dismiss the death screen".
+            if (IsPointerOverUi()) return;
+
             if (command != SwipeCommand.None || WasTapped())
             {
                 LeaveGameOver();
             }
         }
+
+        private static bool IsPointerOverUi() =>
+            EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
         private void OfferDoubleCoins()
         {
@@ -551,6 +598,7 @@ namespace NeonRush.Composition
             _adDirector?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
+            _storeScreen?.Dispose();
             _hud?.Dispose();
             _track?.Dispose();
             _materials?.Dispose();

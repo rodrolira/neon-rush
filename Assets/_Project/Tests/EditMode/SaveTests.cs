@@ -4,6 +4,7 @@ using NeonRush.Application.Progression;
 using NeonRush.Application.Save;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Economy;
+using NeonRush.Domain.Inventory;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Save;
 using NeonRush.Infrastructure.Save;
@@ -27,6 +28,7 @@ namespace NeonRush.Tests.EditMode
         private InMemorySaveStore _store;
         private Wallet _wallet;
         private PlayerProfile _profile;
+        private Inventory _inventory;
         private FakeClock _clock;
         private SaveService _save;
 
@@ -37,8 +39,9 @@ namespace NeonRush.Tests.EditMode
             _store = new InMemorySaveStore();
             _wallet = new Wallet(_bus);
             _profile = new PlayerProfile(_bus);
+            _inventory = new Inventory(_bus);
             _clock = new FakeClock();
-            _save = new SaveService(_store, _wallet, _profile, _bus, _clock);
+            _save = new SaveService(_store, _wallet, _profile, _inventory, _bus, _clock);
         }
 
         [TearDown]
