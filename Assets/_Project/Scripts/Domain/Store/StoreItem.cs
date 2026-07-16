@@ -103,7 +103,27 @@ namespace NeonRush.Domain.Store
 
         public ItemKind Kind { get; }
 
-        public Price Price { get; }
+        public Price Price { get; private set; }
+
+        /// <summary>
+        /// Replaces the currency price with a remotely-configured one.
+        ///
+        /// Only valid for currency items. Real-money prices are owned by the platform store (App
+        /// Store Connect / Play Console) and cannot be set from the client — attempting to would
+        /// make the displayed price lie about what the player is actually charged. The caller
+        /// (GameConfigService) is responsible for clamping the amount to a sane floor first.
+        /// </summary>
+        public void OverrideCurrencyPrice(int amount)
+        {
+            if (Price.IsRealMoney)
+            {
+                throw new InvalidOperationException(
+                    $"'{Id}' is a real-money product; its price is set by the platform store and " +
+                    "cannot be overridden from Remote Config.");
+            }
+
+            Price = Price.InCurrency(Price.Currency, amount);
+        }
 
         /// <summary>Coins granted on purchase (currency packs and bundles).</summary>
         public int GrantsCoins { get; set; }

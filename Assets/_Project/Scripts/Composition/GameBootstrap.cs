@@ -1,5 +1,6 @@
 using System;
 using NeonRush.Application.Ads;
+using NeonRush.Application.Config;
 using NeonRush.Application.Economy;
 using NeonRush.Application.Events;
 using NeonRush.Application.Progression;
@@ -18,6 +19,7 @@ using NeonRush.Domain.Save;
 using NeonRush.Domain.Store;
 using NeonRush.Infrastructure.Ads;
 using NeonRush.Infrastructure.Iap;
+using NeonRush.Infrastructure.Remote;
 using NeonRush.Infrastructure.Save;
 using NeonRush.Infrastructure.Time;
 using NeonRush.Presentation.Input;
@@ -79,6 +81,8 @@ namespace NeonRush.Composition
         private StoreCatalog _catalog;
         private StoreService _store;
         private StoreScreen _storeScreen;
+        private LocalRemoteConfig _remote;
+        private GameConfigService _config;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -100,8 +104,6 @@ namespace NeonRush.Composition
         {
             ConfigureQualityForMobile();
 
-            _tuning = new RunTuning();
-
             _bus = new EventBus();
             _states = new GameStateMachine();
 
@@ -110,8 +112,25 @@ namespace NeonRush.Composition
             _container = new Container();
             _container.RegisterInstance<IEventBus>(_bus);
             _container.RegisterInstance<IClock>(clock);
-            _container.RegisterInstance(_tuning);
             _container.RegisterInstance(_states);
+
+            // --- Remote config --------------------------------------------------------------
+            //
+            // Built first, because it decides the numbers everything else is constructed with. Bound
+            // to LocalRemoteConfig until Firebase is integrated: it returns the compiled-in defaults,
+            // which are a complete, balanced game. The async fetch (kicked off later) then swaps in
+            // remote values for the NEXT run — we never block the boot waiting for the network.
+            _remote = new LocalRemoteConfig();
+            _container.RegisterInstance<IRemoteConfigService>(_remote);
+
+            _config = new GameConfigService(_remote);
+            _container.RegisterInstance(_config);
+
+            // Every balance number now flows through the config service, which clamps each remote
+            // value to a range that is always playable. There is no `new RunTuning()` anywhere in the
+            // shipping path — that is what "no hardcoded balance values" means in practice.
+            _tuning = _config.BuildRunTuning();
+            _container.RegisterInstance(_tuning);
 
             _session = new RunSession(_tuning, _bus);
             _container.RegisterInstance(_session);
@@ -163,7 +182,7 @@ namespace NeonRush.Composition
 
             _container.RegisterInstance(ads);
 
-            var adPolicy = new AdPolicy(new AdPolicyConfig(), clock);
+            var adPolicy = new AdPolicy(_config.BuildAdPolicyConfig(), clock);
             _container.RegisterInstance(adPolicy);
 
             // A player who bought ad removal must not see an interstitial on the very first run after
@@ -192,12 +211,24 @@ namespace NeonRush.Composition
             _container.RegisterInstance(validator);
 
             _catalog = StoreCatalog.Default();
+
+            // Apply any remotely-overridden currency prices over the defaults. On a fresh offline
+            // boot this is a no-op — the defaults already ARE the prices — so the store is always
+            // coherent regardless of network state.
+            _config.ApplyStorePrices(_catalog);
             _container.RegisterInstance(_catalog);
 
             _store = new StoreService(_catalog, _wallet, _inventory, iap, validator, ads, _bus);
             _container.RegisterInstance(_store);
 
             BuildScene();
+
+            // Kick the async fetch AFTER the game is fully built and playable on defaults. When it
+            // completes, the new values are live for the next objects that read them (the next run's
+            // tuning, the next store open). We never rebuild the live run underneath the player.
+            _remote.Fetch(success =>
+                Debug.Log($"[NeonRush] Remote config fetch {(success ? "succeeded" : "failed")}; running on "
+                          + (success ? "remote values" : "compiled defaults") + "."));
 
             _runEndedSubscription = _bus.Subscribe<RunEnded>(OnRunEnded);
 
