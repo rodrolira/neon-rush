@@ -87,6 +87,8 @@ namespace NeonRush.Composition
         private GameConfigService _config;
         private AnalyticsReporter _analyticsReporter;
         private NeonRush.Application.Missions.MissionService _missions;
+        private Domain.Retention.DailyRewardService _daily;
+        private MainMenuScreen _menu;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -188,21 +190,14 @@ namespace NeonRush.Composition
 
             // --- Daily reward ---------------------------------------------------------------
             //
-            // Claimed automatically at boot for now: the grey-box stage has no main menu to hang a
-            // claim ritual on, and an unclaimed reward that silently expires would punish players
-            // for our missing UI. When the menu exists, this becomes an explicit, celebratory claim.
-            var dailyRewards = new Domain.Retention.DailyRewardService(
+            // NOT auto-claimed. The claim is an explicit button in the main menu — the ten-second
+            // "DAY 4, +300 COINS" ritual is most of the feature's retention value, and an automatic
+            // grant at boot would deliver the coins while discarding the reason the player came.
+            _daily = new Domain.Retention.DailyRewardService(
                 _wallet, clock, _bus, loaded.Data.LastDailyClaimUtc, loaded.Data.DailyStreakDays);
 
-            _container.RegisterInstance(dailyRewards);
-            _save.DailyRewards = dailyRewards;
-
-            if (dailyRewards.TryClaim(out var claimed) == Domain.Retention.ClaimRefusal.None)
-            {
-                Debug.Log($"[NeonRush] Daily reward claimed: day {claimed.StreakDay} of streak, " +
-                          $"+{claimed.CoinsGranted} coins, +{claimed.GemsGranted} gems.");
-                _save.MarkDirty();
-            }
+            _container.RegisterInstance(_daily);
+            _save.DailyRewards = _daily;
 
             // --- Missions -------------------------------------------------------------------
             //
@@ -293,8 +288,11 @@ namespace NeonRush.Composition
 
             _runEndedSubscription = _bus.Subscribe<RunEnded>(OnRunEnded);
 
+            // Boot lands on the menu, not straight into a run: the daily claim and today's missions
+            // are the first thing a returning player sees, and a new player gets one breath before
+            // the game demands their reflexes.
             _states.TransitionTo(GameState.MainMenu);
-            StartRun();
+            _menu.Show();
         }
 
         private void BuildScene()
@@ -376,11 +374,34 @@ namespace NeonRush.Composition
 
             _storeScreen = new StoreScreen(_catalog, _store, _wallet, _inventory, /*iap*/ ResolveIap(), _bus, uiRoot);
 
+            _menu = new MainMenuScreen(_wallet, _profile, _missions, _daily, _bus, uiRoot);
+            _menu.StartRequested += OnMenuStartRequested;
+            _menu.ShopRequested += () => _storeScreen.Show();
+
             // The SHOP button lives on the death screen (the natural spend moment); tapping it opens
-            // the store overlay. The store closes itself via its own CLOSE button.
+            // the store overlay. The store closes itself via its own CLOSE button. MENU returns to
+            // the main menu — missions and the daily claim — without starting a run.
             _hud.ShopRequested += () => _storeScreen.Show();
+            _hud.MenuRequested += OnMenuRequested;
 
             _input = new SwipeInput();
+        }
+
+        private void OnMenuStartRequested()
+        {
+            // Guard: the tap that closes the store must not fall through and launch a run.
+            if (_storeScreen.IsOpen) return;
+
+            _menu.Hide();
+            StartRun();
+        }
+
+        private void OnMenuRequested()
+        {
+            _awaitingRestart = false;
+
+            _states.TransitionTo(GameState.MainMenu);
+            _menu.Show();
         }
 
         private IIapService ResolveIap() => _container.Resolve<IIapService>();
@@ -692,6 +713,7 @@ namespace NeonRush.Composition
             _missions?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
+            _menu?.Dispose();
             _storeScreen?.Dispose();
             _hud?.Dispose();
             _track?.Dispose();

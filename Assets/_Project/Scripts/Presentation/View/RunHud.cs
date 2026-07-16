@@ -214,23 +214,33 @@ namespace NeonRush.Presentation.View
         /// </summary>
         private void BuildShopButton(Transform parent)
         {
-            var go = new GameObject("ShopButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            // Two buttons side by side: SHOP (spend the coins you just banked) and MENU (missions,
+            // daily reward). Tap anywhere else = instant retry, which stays the dominant affordance —
+            // the fast death-retry loop is the engine of a runner and nothing may slow it down.
+            BuildPanelButton(parent, "ShopButton", "SHOP", new Vector2(-190f, 220f),
+                new Color(0.55f, 0.35f, 0.85f), () => ShopRequested?.Invoke());
+
+            BuildPanelButton(parent, "MenuButton", "MENU", new Vector2(190f, 220f),
+                new Color(0.2f, 0.45f, 0.75f), () => MenuRequested?.Invoke());
+        }
+
+        private void BuildPanelButton(Transform parent, string name, string caption, Vector2 position, Color colour, Action onClick)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, worldPositionStays: false);
 
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0f);
             rect.anchorMax = new Vector2(0.5f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
-            rect.sizeDelta = new Vector2(360f, 100f);
-            rect.anchoredPosition = new Vector2(0f, 220f);
+            rect.sizeDelta = new Vector2(340f, 100f);
+            rect.anchoredPosition = position;
 
-            go.GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.85f);
-
-            var button = go.GetComponent<Button>();
-            button.onClick.AddListener(() => ShopRequested?.Invoke());
+            go.GetComponent<Image>().color = colour;
+            go.GetComponent<Button>().onClick.AddListener(() => onClick());
 
             var label = Label(go.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 38);
-            label.text = "SHOP";
+            label.text = caption;
             label.color = Color.white;
             var labelRect = label.GetComponent<RectTransform>();
             labelRect.anchorMin = Vector2.zero;
@@ -241,6 +251,9 @@ namespace NeonRush.Presentation.View
 
         /// <summary>Raised when the player taps SHOP on the death screen. The composition root opens the store.</summary>
         public event Action ShopRequested;
+
+        /// <summary>Raised when the player taps MENU on the death screen.</summary>
+        public event Action MenuRequested;
 
         private static Text Label(Transform parent, string name, Vector2 anchor, Vector2 offset, TextAnchor alignment, int size)
         {
