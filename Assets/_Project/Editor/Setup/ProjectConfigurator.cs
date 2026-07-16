@@ -78,11 +78,27 @@ namespace NeonRush.EditorTools.Setup
             }
 
             // Mobile budget. Every one of these is a frame-rate decision, not a taste decision.
-            pipeline.supportsHDR = false;              // HDR doubles framebuffer bandwidth — the #1 mobile GPU cost.
+            //
+            // HDR is the one deliberate exception: it costs real framebuffer bandwidth, but the
+            // entire art direction is emissive neon, and neon without bloom is just brightly
+            // painted plastic. Bloom needs HDR to have anything to bloom. If telemetry shows
+            // low-end devices struggling, this becomes a Remote Config quality toggle — never a
+            // reason to ship a look that doesn't sell the game.
+            pipeline.supportsHDR = true;
             pipeline.msaaSampleCount = 2;              // 2x is nearly free on tile-based mobile GPUs; 4x is not.
             pipeline.shadowDistance = 0f;              // No real-time shadows at all. See GameBootstrap.
             pipeline.supportsCameraDepthTexture = false;
             pipeline.supportsCameraOpaqueTexture = false;
+
+            // The renderer needs the URP post-process data asset, or Volume/Bloom silently render
+            // nothing — a classic "why is my bloom invisible" that produces no error anywhere.
+            if (renderer.postProcessData == null)
+            {
+                renderer.postProcessData = AssetDatabase.LoadAssetAtPath<PostProcessData>(
+                    "Packages/com.unity.render-pipelines.universal/Runtime/Data/PostProcessData.asset");
+
+                EditorUtility.SetDirty(renderer);
+            }
 
             // Render at a slightly reduced resolution on very high-DPI phones. A 1440p runner is
             // fragment-bound on almost every Android GPU; 80% render scale is close to invisible at

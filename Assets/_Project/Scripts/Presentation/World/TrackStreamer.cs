@@ -176,18 +176,29 @@ namespace NeonRush.Presentation.World
         /// <summary>Degrees per second a coin rotates about the vertical axis.</summary>
         private const float CoinSpinSpeed = 180f;
 
+        /// <summary>Amplitude of the coin's vertical bob, in metres. Subtle on purpose.</summary>
+        private const float CoinBobAmplitude = 0.08f;
+
+        /// <summary>Elapsed streamer time, drives the bob phase.</summary>
+        private float _time;
+
         /// <summary>
-        /// Spins the coins.
+        /// Spins and bobs the coins.
         ///
-        /// This is not decoration. A static gold disc reads as scenery; a spinning one reads as
-        /// *collectable*, and the player's eye tracks it without being told to. It is the cheapest
-        /// possible way to teach the player what to run toward.
+        /// This is not decoration. A static gold disc reads as scenery; a spinning, gently floating
+        /// one reads as *collectable*, and the player's eye tracks it without being told to. It is
+        /// the cheapest possible way to teach the player what to run toward.
         ///
-        /// Cost is a rotation on the ~90 coins currently in the world — trivial, and it happens
-        /// inside the loop the streamer already runs, so it costs no extra iteration.
+        /// The bob phase is offset by world X so a row of coins shimmers as a wave rather than
+        /// pumping in lockstep — lockstep motion reads as mechanical, waves read as alive.
+        ///
+        /// Cost is a rotation and a sine on the ~90 coins currently in the world — trivial, and it
+        /// happens inside the loop the streamer already runs, so it costs no extra iteration.
         /// </summary>
         private void SpinCoins(float deltaTime)
         {
+            _time += deltaTime;
+
             var degrees = CoinSpinSpeed * deltaTime;
 
             for (var c = 0; c < _active.Count; c++)
@@ -200,6 +211,10 @@ namespace NeonRush.Presentation.World
                     if (coin == null) continue; // Already collected this pass.
 
                     coin.transform.Rotate(Vector3.up, degrees, Space.World);
+
+                    var position = coin.transform.localPosition;
+                    position.y = CoinHeight + Mathf.Sin(_time * 3f + position.x * 1.7f + position.z * 0.3f) * CoinBobAmplitude;
+                    coin.transform.localPosition = position;
                 }
             }
         }
@@ -388,7 +403,7 @@ namespace NeonRush.Presentation.World
             return laneIndex == firstNonFree;
         }
 
-        /// <summary>Builds the visual shell of a chunk: road slab plus two lane markers.</summary>
+        /// <summary>Builds the visual shell of a chunk: road, lane markers, and the flanking skyline.</summary>
         private GameObject BuildChunkVisual(Material road, Material line)
         {
             var root = new GameObject("Chunk");
@@ -418,7 +433,75 @@ namespace NeonRush.Presentation.World
                 marker.transform.localPosition = new Vector3(x, 0.005f, _tuning.ChunkLength * 0.5f);
             }
 
+            BuildSkyline(root.transform);
+
             return root;
+        }
+
+        /// <summary>Neon accent palette for building trims. Cycled deterministically per building.</summary>
+        private static readonly Color[] TrimColours =
+        {
+            new(0.20f, 1.00f, 0.85f), // cyan
+            new(1.00f, 0.25f, 0.75f), // magenta
+            new(0.55f, 0.35f, 1.00f), // violet
+            new(1.00f, 0.82f, 0.25f), // gold (rare warm accent)
+        };
+
+        /// <summary>
+        /// The flanking skyline: dark towers with emissive neon roof trims on both sides of the road.
+        ///
+        /// This is what turns "a road in a void" into "a road through a city", and it costs almost
+        /// nothing: the buildings are part of the pooled chunk shell, built once when the shell is
+        /// created and recycled with it forever after. With ~8 pooled shells the skyline pattern
+        /// repeats every ~8 chunks — at 26 m/s, through fog, with randomised heights per shell,
+        /// nobody can perceive the period.
+        ///
+        /// Buildings sit OUTSIDE the outer lanes and never collide with anything — they are set
+        /// dressing, invisible to the AABB system, which only ever tests chunk.Obstacles.
+        /// </summary>
+        private void BuildSkyline(Transform root)
+        {
+            var bodyMaterial = _materials.Get(new Color(0.05f, 0.04f, 0.11f), emission: 0.0f);
+
+            const int buildingsPerSide = 4;
+            var edge = _tuning.LaneWidth * LaneCount * 0.5f + 1.2f;
+            var spacing = _tuning.ChunkLength / buildingsPerSide;
+
+            for (var side = -1; side <= 1; side += 2)
+            {
+                for (var i = 0; i < buildingsPerSide; i++)
+                {
+                    // Deterministic variety from the seeded random: every pooled shell rolls its own
+                    // skyline once, at pool-warm time, and keeps it. No per-frame cost, ever.
+                    var height = 4f + (float)_random.NextDouble() * 12f;
+                    var buildingWidth = 2.5f + (float)_random.NextDouble() * 2.5f;
+                    var depth = 2.5f + (float)_random.NextDouble() * 2f;
+                    var gap = 1.5f + (float)_random.NextDouble() * 3f;
+
+                    var x = side * (edge + gap + buildingWidth * 0.5f);
+                    var z = i * spacing + spacing * 0.5f;
+
+                    var body = PrimitiveFactory.Cube(
+                        "Tower",
+                        new Vector3(buildingWidth, height, depth),
+                        bodyMaterial,
+                        root);
+
+                    body.transform.localPosition = new Vector3(x, height * 0.5f, z);
+
+                    // The neon roof trim: a thin, hot strip capping the tower. This is the detail
+                    // the bloom pass turns into the skyline's glow.
+                    var trim = TrimColours[_random.Next(TrimColours.Length)];
+
+                    var strip = PrimitiveFactory.Cube(
+                        "Trim",
+                        new Vector3(buildingWidth + 0.15f, 0.15f, depth + 0.15f),
+                        _materials.Get(trim, emission: 2.4f),
+                        root);
+
+                    strip.transform.localPosition = new Vector3(x, height + 0.08f, z);
+                }
+            }
         }
 
         public void Dispose()

@@ -336,7 +336,6 @@ namespace NeonRush.Composition
 
             var camera = cameraGo.GetComponent<Camera>();
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.02f, 0.01f, 0.06f);
             camera.fieldOfView = 62f;
             camera.nearClipPlane = 0.3f;
 
@@ -344,7 +343,22 @@ namespace NeonRush.Composition
             // extra metre is geometry the GPU considers and then discards.
             camera.farClipPlane = _tuning.ChunkLength * (_tuning.ActiveChunks + 1);
 
+            // Bloom, vignette and fog — the pass that turns emissive cubes into neon. Also sets the
+            // background colour so fog and horizon blend seamlessly.
+            NeonAtmosphere.Setup(camera, transform, camera.farClipPlane);
+
             _camera = new RunCameraRig(cameraGo.transform, playerPivot, camera);
+
+            // The player's light trail: at speed it is the single clearest "you are going FAST"
+            // signal on screen, and it costs one strip of triangles.
+            var trail = playerGo.AddComponent<TrailRenderer>();
+            trail.material = _materials.Get(NeonMaterials.Player, emission: 2.2f);
+            trail.time = 0.22f;
+            trail.startWidth = 0.55f;
+            trail.endWidth = 0.05f;
+            trail.minVertexDistance = 0.08f;
+            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            trail.receiveShadows = false;
 
             // --- Lighting -------------------------------------------------------------------
             var lightGo = new GameObject("KeyLight", typeof(Light));
