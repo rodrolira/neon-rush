@@ -284,6 +284,18 @@ namespace NeonRush.Infrastructure.Save
             public long totalDistance;
             public string[] ownedItems;
             public bool adsRemoved;
+            public long lastDailyClaimUtcTicks;
+            public int dailyStreakDays;
+            public int missionDay;
+            public MissionDto[] missions;
+
+            [Serializable]
+            public sealed class MissionDto
+            {
+                public string id;
+                public int progress;
+                public bool rewarded;
+            }
 
             /// <summary>DateTime as UTC ticks: JsonUtility cannot serialise DateTime, and ticks are unambiguous across time zones.</summary>
             public long savedAtUtcTicks;
@@ -298,8 +310,26 @@ namespace NeonRush.Infrastructure.Save
                 totalDistance = data.TotalDistance,
                 ownedItems = data.OwnedItems?.ToArray() ?? Array.Empty<string>(),
                 adsRemoved = data.AdsRemoved,
+                lastDailyClaimUtcTicks = data.LastDailyClaimUtc.Ticks,
+                dailyStreakDays = data.DailyStreakDays,
+                missionDay = data.MissionDay,
+                missions = ToMissionDtos(data),
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
+
+            private static MissionDto[] ToMissionDtos(SaveData data)
+            {
+                if (data.Missions == null || data.Missions.Count == 0) return Array.Empty<MissionDto>();
+
+                var dtos = new MissionDto[data.Missions.Count];
+                for (var i = 0; i < data.Missions.Count; i++)
+                {
+                    var m = data.Missions[i];
+                    dtos[i] = new MissionDto { id = m.Id, progress = m.Progress, rewarded = m.Rewarded };
+                }
+
+                return dtos;
+            }
 
             public SaveData ToDomain() => new()
             {
@@ -318,14 +348,41 @@ namespace NeonRush.Infrastructure.Save
                     : new System.Collections.Generic.List<string>(),
 
                 AdsRemoved = adsRemoved,
+                DailyStreakDays = Math.Max(0, dailyStreakDays),
+                LastDailyClaimUtc = TicksToUtc(lastDailyClaimUtcTicks),
+                MissionDay = Math.Max(0, missionDay),
+                Missions = FromMissionDtos(missions),
 
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save
                 // into a hard crash on boot.
-                SavedAtUtc = savedAtUtcTicks > 0 && savedAtUtcTicks <= DateTime.MaxValue.Ticks
-                    ? new DateTime(savedAtUtcTicks, DateTimeKind.Utc)
-                    : DateTime.MinValue,
+                SavedAtUtc = TicksToUtc(savedAtUtcTicks),
             };
+
+            private static DateTime TicksToUtc(long ticks) =>
+                ticks > 0 && ticks <= DateTime.MaxValue.Ticks
+                    ? new DateTime(ticks, DateTimeKind.Utc)
+                    : DateTime.MinValue;
+
+            private static System.Collections.Generic.List<SaveData.MissionSave> FromMissionDtos(MissionDto[] dtos)
+            {
+                var list = new System.Collections.Generic.List<SaveData.MissionSave>();
+                if (dtos == null) return list; // Older save with no missions field: JsonUtility leaves it null.
+
+                foreach (var dto in dtos)
+                {
+                    if (dto == null || string.IsNullOrEmpty(dto.id)) continue;
+
+                    list.Add(new SaveData.MissionSave
+                    {
+                        Id = dto.id,
+                        Progress = Math.Max(0, dto.progress),
+                        Rewarded = dto.rewarded,
+                    });
+                }
+
+                return list;
+            }
         }
     }
 }

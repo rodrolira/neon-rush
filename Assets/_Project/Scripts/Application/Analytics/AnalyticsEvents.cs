@@ -37,6 +37,10 @@ namespace NeonRush.Application.Analytics
         // --- Ads -------------------------------------------------------------------------
         public const string AdShown = "ad_shown";
 
+        // --- Retention ---------------------------------------------------------------------
+        public const string DailyRewardClaim = "daily_reward_claim";
+        public const string MissionComplete = "mission_complete";
+
         // --- Parameter keys ----------------------------------------------------------------
         public static class Params
         {
@@ -59,6 +63,10 @@ namespace NeonRush.Application.Analytics
             public const string RealMoney = "real_money";
 
             public const string Placement = "placement";
+
+            public const string StreakDay = "streak_day";
+
+            public const string MissionId = "mission_id";
         }
 
         // --- User property names -----------------------------------------------------------

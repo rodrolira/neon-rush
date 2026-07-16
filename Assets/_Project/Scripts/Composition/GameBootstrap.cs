@@ -86,6 +86,7 @@ namespace NeonRush.Composition
         private LocalRemoteConfig _remote;
         private GameConfigService _config;
         private AnalyticsReporter _analyticsReporter;
+        private NeonRush.Application.Missions.MissionService _missions;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -184,6 +185,51 @@ namespace NeonRush.Composition
 
             _save = new SaveService(store, _wallet, _profile, _inventory, _bus, clock, loaded.Data.AdsRemoved);
             _container.RegisterInstance(_save);
+
+            // --- Daily reward ---------------------------------------------------------------
+            //
+            // Claimed automatically at boot for now: the grey-box stage has no main menu to hang a
+            // claim ritual on, and an unclaimed reward that silently expires would punish players
+            // for our missing UI. When the menu exists, this becomes an explicit, celebratory claim.
+            var dailyRewards = new Domain.Retention.DailyRewardService(
+                _wallet, clock, _bus, loaded.Data.LastDailyClaimUtc, loaded.Data.DailyStreakDays);
+
+            _container.RegisterInstance(dailyRewards);
+            _save.DailyRewards = dailyRewards;
+
+            if (dailyRewards.TryClaim(out var claimed) == Domain.Retention.ClaimRefusal.None)
+            {
+                Debug.Log($"[NeonRush] Daily reward claimed: day {claimed.StreakDay} of streak, " +
+                          $"+{claimed.CoinsGranted} coins, +{claimed.GemsGranted} gems.");
+                _save.MarkDirty();
+            }
+
+            // --- Missions -------------------------------------------------------------------
+            //
+            // Three per day, deterministic from the UTC date, progress driven entirely by events the
+            // game already publishes. Order matters here: RefreshIfNewDay builds today's set FIRST,
+            // then RestoreProgress lays saved progress onto it (progress from a previous day is
+            // discarded inside RestoreProgress — yesterday's half-done mission does not carry over).
+            _missions = new NeonRush.Application.Missions.MissionService(_wallet, clock, _bus);
+            _container.RegisterInstance(_missions);
+
+            _missions.RefreshIfNewDay();
+
+            var savedMissions = new System.Collections.Generic.List<(string, int, bool)>();
+            foreach (var m in loaded.Data.Missions)
+            {
+                savedMissions.Add((m.Id, m.Progress, m.Rewarded));
+            }
+
+            _missions.RestoreProgress(loaded.Data.MissionDay, savedMissions);
+            _save.Missions = _missions;
+
+            foreach (var mission in _missions.Active)
+            {
+                Debug.Log($"[NeonRush] Daily mission: {mission.Definition.Description} " +
+                          $"({mission.Progress}/{mission.Definition.Target})" +
+                          (mission.Rewarded ? " — completed" : string.Empty));
+            }
 
             // --- Ads ------------------------------------------------------------------------
             //
@@ -643,6 +689,7 @@ namespace NeonRush.Composition
 
             _adDirector?.Dispose();
             _analyticsReporter?.Dispose();
+            _missions?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
             _storeScreen?.Dispose();

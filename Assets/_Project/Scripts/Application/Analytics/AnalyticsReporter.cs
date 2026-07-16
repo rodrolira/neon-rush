@@ -5,6 +5,7 @@ using NeonRush.Application.Store;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Economy;
 using NeonRush.Domain.Ports;
+using NeonRush.Domain.Retention;
 
 namespace NeonRush.Application.Analytics
 {
@@ -46,6 +47,31 @@ namespace NeonRush.Application.Analytics
             _subscriptions.Add(bus.Subscribe<PurchaseFailedInsufficientFunds>(OnPurchaseBlocked));
             _subscriptions.Add(bus.Subscribe<WalletTamperDetected>(OnWalletTampered));
             _subscriptions.Add(bus.Subscribe<PurchaseCompleted>(OnPurchaseCompleted));
+            _subscriptions.Add(bus.Subscribe<DailyRewardClaimed>(OnDailyRewardClaimed));
+            _subscriptions.Add(bus.Subscribe<Missions.MissionCompleted>(OnMissionCompleted));
+        }
+
+        private void OnMissionCompleted(Missions.MissionCompleted e)
+        {
+            // Which missions get finished (and which never do) is how the pool gets tuned: a mission
+            // nobody completes is either too hard or not worth its reward, and both are fixable.
+            _analytics.Track(AnalyticsEvents.MissionComplete, new Dictionary<string, object>
+            {
+                [AnalyticsEvents.Params.MissionId] = e.MissionId,
+                [AnalyticsEvents.Params.Coins] = e.RewardCoins,
+            });
+        }
+
+        private void OnDailyRewardClaimed(DailyRewardClaimed e)
+        {
+            // The streak day is THE retention datum: the distribution of streak_day tells you exactly
+            // where the daily loop loses people (a cliff at day 3 means day 4's reward is not worth
+            // coming back for).
+            _analytics.Track(AnalyticsEvents.DailyRewardClaim, new Dictionary<string, object>
+            {
+                [AnalyticsEvents.Params.StreakDay] = e.StreakDay,
+                [AnalyticsEvents.Params.Coins] = e.CoinsGranted,
+            });
         }
 
         private void OnRunStarted(RunStarted e)

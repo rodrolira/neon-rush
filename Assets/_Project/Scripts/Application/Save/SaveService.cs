@@ -48,6 +48,12 @@ namespace NeonRush.Application.Save
         private readonly PlayerProfile _profile;
         private readonly Inventory _inventory;
         private readonly IClock _clock;
+
+        /// <summary>Optional: set after construction because the reward service needs the loaded save first.</summary>
+        public Domain.Retention.DailyRewardService DailyRewards { get; set; }
+
+        /// <summary>Optional, same pattern as <see cref="DailyRewards"/>.</summary>
+        public Missions.MissionService Missions { get; set; }
         private readonly List<IDisposable> _subscriptions = new();
 
         private bool _dirty;
@@ -151,6 +157,28 @@ namespace NeonRush.Application.Save
 
             data.OwnedItems = new List<string>(_inventory.Owned);
             data.AdsRemoved = _adsRemoved;
+
+            if (DailyRewards != null)
+            {
+                data.LastDailyClaimUtc = DailyRewards.LastClaimUtc;
+                data.DailyStreakDays = DailyRewards.StreakDays;
+            }
+
+            if (Missions != null)
+            {
+                data.MissionDay = Missions.MissionDay;
+                data.Missions.Clear();
+
+                foreach (var mission in Missions.Active)
+                {
+                    data.Missions.Add(new SaveData.MissionSave
+                    {
+                        Id = mission.Definition.Id,
+                        Progress = mission.Progress,
+                        Rewarded = mission.Rewarded,
+                    });
+                }
+            }
 
             _profile.WriteTo(data);
 

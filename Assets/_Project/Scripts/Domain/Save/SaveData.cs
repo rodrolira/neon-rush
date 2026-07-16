@@ -53,6 +53,26 @@ namespace NeonRush.Domain.Save
         /// <summary>True once the player has bought ad removal.</summary>
         public bool AdsRemoved { get; set; }
 
+        /// <summary>UTC instant of the last daily-reward claim. MinValue = never claimed.</summary>
+        public DateTime LastDailyClaimUtc { get; set; }
+
+        /// <summary>Consecutive daily-reward days. The streak IS the retention loop; losing it to a save bug would be unforgivable.</summary>
+        public int DailyStreakDays { get; set; }
+
+        /// <summary>Day stamp the saved mission set belongs to. Progress never crosses days.</summary>
+        public int MissionDay { get; set; }
+
+        /// <summary>Progress of today's missions. One entry per active mission.</summary>
+        public List<MissionSave> Missions { get; set; } = new();
+
+        /// <summary>One mission's persisted state. Flat and dumb on purpose — it is a wire format.</summary>
+        public sealed class MissionSave
+        {
+            public string Id;
+            public int Progress;
+            public bool Rewarded;
+        }
+
         /// <summary>
         /// When this file was written, in UTC, according to the trusted clock (<see cref="Ports.IClock"/>).
         ///
@@ -76,7 +96,22 @@ namespace NeonRush.Domain.Save
             // writing it — which is exactly the class of bug Clone() exists to prevent.
             OwnedItems = new List<string>(OwnedItems),
             AdsRemoved = AdsRemoved,
+            LastDailyClaimUtc = LastDailyClaimUtc,
+            DailyStreakDays = DailyStreakDays,
+            MissionDay = MissionDay,
+            Missions = CloneMissions(),
         };
+
+        private List<MissionSave> CloneMissions()
+        {
+            var copy = new List<MissionSave>(Missions.Count);
+            foreach (var m in Missions)
+            {
+                copy.Add(new MissionSave { Id = m.Id, Progress = m.Progress, Rewarded = m.Rewarded });
+            }
+
+            return copy;
+        }
 
         /// <summary>A fresh profile. This is what a brand-new install loads.</summary>
         public static SaveData NewPlayer() => new()
@@ -90,6 +125,10 @@ namespace NeonRush.Domain.Save
             SavedAtUtc = DateTime.MinValue,
             OwnedItems = new List<string>(),
             AdsRemoved = false,
+            LastDailyClaimUtc = DateTime.MinValue,
+            DailyStreakDays = 0,
+            MissionDay = 0,
+            Missions = new List<MissionSave>(),
         };
     }
 
