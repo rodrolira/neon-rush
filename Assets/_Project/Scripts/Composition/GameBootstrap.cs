@@ -1,5 +1,6 @@
 using System;
 using NeonRush.Application.Ads;
+using NeonRush.Application.Analytics;
 using NeonRush.Application.Config;
 using NeonRush.Application.Economy;
 using NeonRush.Application.Events;
@@ -18,6 +19,7 @@ using NeonRush.Domain.Run;
 using NeonRush.Domain.Save;
 using NeonRush.Domain.Store;
 using NeonRush.Infrastructure.Ads;
+using NeonRush.Infrastructure.Analytics;
 using NeonRush.Infrastructure.Iap;
 using NeonRush.Infrastructure.Remote;
 using NeonRush.Infrastructure.Save;
@@ -83,6 +85,7 @@ namespace NeonRush.Composition
         private StoreScreen _storeScreen;
         private LocalRemoteConfig _remote;
         private GameConfigService _config;
+        private AnalyticsReporter _analyticsReporter;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -125,6 +128,18 @@ namespace NeonRush.Composition
 
             _config = new GameConfigService(_remote);
             _container.RegisterInstance(_config);
+
+            // --- Analytics ------------------------------------------------------------------
+            //
+            // RecordingAnalytics until Firebase lands: it logs events to the console in the Editor
+            // (a designer can watch the funnel fire while playing) and proves the instrumentation
+            // pipeline, so that when the SDK adapter is bound, day-one data flows through a taxonomy
+            // that has already been exercised. Swapping in FirebaseAnalytics is one binding.
+            IAnalyticsService analytics = new RecordingAnalytics(logToConsole: UnityEngine.Application.isEditor);
+            _container.RegisterInstance(analytics);
+
+            _analyticsReporter = new AnalyticsReporter(analytics, _bus);
+            _container.RegisterInstance(_analyticsReporter);
 
             // Every balance number now flows through the config service, which clamps each remote
             // value to a range that is always playable. There is no `new RunTuning()` anywhere in the
@@ -627,6 +642,7 @@ namespace NeonRush.Composition
             _save?.Dispose();
 
             _adDirector?.Dispose();
+            _analyticsReporter?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
             _storeScreen?.Dispose();
