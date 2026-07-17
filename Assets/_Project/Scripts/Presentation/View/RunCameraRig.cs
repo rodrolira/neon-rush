@@ -52,15 +52,29 @@ namespace NeonRush.Presentation.View
         /// it, the difficulty ramp is something the player feels only as "I keep dying" rather than
         /// "I am going terrifyingly fast", and those two experiences retain very differently.
         /// </summary>
-        private const float FovKick = 14f;
+        private const float FovKick = 18f;
 
         /// <summary>How quickly the lens responds to speed changes. Slow, so it breathes rather than snaps.</summary>
         private const float FovSharpness = 2.5f;
+
+        /// <summary>Smoothed speed-driven FOV, kept separate from the punch below.</summary>
+        private float _fov;
+
+        /// <summary>
+        /// A transient FOV bulge, added straight onto the lens and shed over a fraction of a second.
+        /// Held apart from <see cref="_fov"/> on purpose: the speed-FOV smoothing is deliberately
+        /// slow (it breathes), and routing a punch through it would swallow the punch entirely.
+        /// </summary>
+        private float _fovPunch;
+
+        /// <summary>Degrees of punch shed per second. ~0.4s to clear a typical surge.</summary>
+        private const float FovPunchDecay = 16f;
 
         // --- Death shake -------------------------------------------------------------------
 
         private float _shakeRemaining;
         private float _shakeMagnitude;
+        private float _shakeDuration = 0.4f;
 
         /// <summary>Deterministic shake: no Random, so a replayed run shakes identically.</summary>
         private float _shakeTime;
@@ -74,6 +88,7 @@ namespace NeonRush.Presentation.View
             _camera.position = Offset;
             _camera.rotation = Quaternion.Euler(12f, 0f, 0f);
 
+            _fov = BaseFov;
             if (_lens != null) _lens.fieldOfView = BaseFov;
         }
 
@@ -83,6 +98,9 @@ namespace NeonRush.Presentation.View
             _camera.position = Offset;
             _shakeRemaining = 0f;
             _shakeTime = 0f;
+
+            _fov = BaseFov;
+            _fovPunch = 0f;
 
             if (_lens != null) _lens.fieldOfView = BaseFov;
         }
@@ -94,10 +112,21 @@ namespace NeonRush.Presentation.View
         /// punctuation that tells the player *they* hit something, which is the difference between
         /// "I made a mistake" and "the game ended for no reason".
         /// </summary>
-        public void Shake(float duration = 0.35f, float magnitude = 0.35f)
+        public void Shake(float duration = 0.4f, float magnitude = 0.5f)
         {
             _shakeRemaining = duration;
+            _shakeDuration = duration;
             _shakeMagnitude = magnitude;
+        }
+
+        /// <summary>
+        /// A quick outward FOV bulge, added on top of the speed-driven FOV and shed over ~0.4s.
+        /// Fired on each distance milestone to punctuate the "changing gear" of the difficulty ramp
+        /// — the moment the run gets faster should be something the player sees, not only survives.
+        /// </summary>
+        public void PunchFov(float degrees = 6f)
+        {
+            _fovPunch = Mathf.Max(_fovPunch, degrees);
         }
 
         /// <param name="normalisedSpeed">0 at base speed, 1 at the speed cap.</param>
@@ -130,8 +159,11 @@ namespace NeonRush.Presentation.View
 
             var target = BaseFov + FovKick * Mathf.Clamp01(normalisedSpeed);
             var t = 1f - Mathf.Exp(-FovSharpness * deltaTime);
+            _fov = Mathf.Lerp(_fov, target, t);
 
-            _lens.fieldOfView = Mathf.Lerp(_lens.fieldOfView, target, t);
+            _fovPunch = Mathf.Max(0f, _fovPunch - FovPunchDecay * deltaTime);
+
+            _lens.fieldOfView = _fov + _fovPunch;
         }
 
         private Vector3 TickShake(float deltaTime)
@@ -149,7 +181,7 @@ namespace NeonRush.Presentation.View
 
             // Decays to nothing rather than stopping dead — a shake that cuts off abruptly looks
             // like a bug. Two different frequencies per axis so it never reads as a clean sine.
-            var decay = _shakeRemaining / 0.35f;
+            var decay = _shakeRemaining / _shakeDuration;
             var amplitude = _shakeMagnitude * Mathf.Clamp01(decay);
 
             return new Vector3(

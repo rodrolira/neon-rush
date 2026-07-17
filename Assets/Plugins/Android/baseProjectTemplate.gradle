@@ -1,0 +1,35 @@
+plugins {
+    // If you are changing the Android Gradle Plugin version, make sure it is compatible with the Gradle version preinstalled with Unity
+    // See which Gradle version is preinstalled with Unity here https://docs.unity3d.com/Manual/android-gradle-overview.html
+    // See official Gradle and Android Gradle Plugin compatibility table here https://developer.android.com/studio/releases/gradle-plugin#updating-gradle
+    // To specify a custom Gradle version in Unity, go do "Preferences > External Tools", uncheck "Gradle Installed with Unity (recommended)" and specify a path to a custom Gradle version
+    id 'com.android.application' version '9.0.0' apply false
+    id 'com.android.library' version '9.0.0' apply false
+    **BUILD_SCRIPT_DEPS**
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
+}
+
+// ── Neon Rush: pin one Kotlin stdlib version across every module ─────────────────────────
+// Why this block exists (and must not be deleted): Unity IAP (com.unity.purchasing) pulls
+// com.android.billingclient:billing:9.0.0, which transitively drags in the pre-1.8
+// kotlin-stdlib-jdk8:1.6.21. Since Kotlin 1.8 the jdk7/jdk8 stdlib artifacts were folded into
+// the main kotlin-stdlib, so that old jar now duplicates classes already present in the
+// kotlin-stdlib:1.8.22 the Android Gradle Plugin resolves. Gradle's :launcher:checkDebugDuplicateClasses
+// then aborts the whole build ("Duplicate class kotlin.jvm.jdk8.*").
+//
+// Forcing all three coordinates to 1.8.22 turns the jdk7/jdk8 jars into the empty redirect
+// stubs they became in 1.8, leaving exactly one copy of each class. This is the durable fix,
+// and it pre-empts the identical clash Firebase's Android SDK would otherwise reintroduce.
+// When Firebase or Mobile Notifications land, keep this — do not go back to deleting packages.
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+        }
+    }
+}

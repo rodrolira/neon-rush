@@ -32,7 +32,13 @@ namespace NeonRush.EditorTools.Setup
             "com.unity.testtools.codecoverage",     // Coverage reporting in CI
             "com.unity.nuget.newtonsoft-json",      // Save serialisation + Firebase dependency
             "com.unity.purchasing",                 // Wraps Google Play Billing + StoreKit
-            "com.unity.mobile.notifications",       // Local notifications (complements FCM)
+            // NOTE: "com.unity.mobile.notifications" (local reminders, complements FCM) is
+            // intentionally NOT installed yet. Its Android library pins an old kotlin-stdlib-jdk8
+            // (1.6.21) that collides with the newer kotlin-stdlib (1.8.22) AGP pulls in, failing
+            // Gradle's :launcher:checkDebugDuplicateClasses. No gameplay code references it today,
+            // so it is pure build-breaking dead weight. Re-add it together with Firebase (which
+            // needs the same fix): pin Kotlin via a resolutionStrategy force in a custom
+            // baseProjectTemplate.gradle, then this line comes back. See docs/PLAYTEST_ON_PHONE.md.
         };
 
         /// <summary>

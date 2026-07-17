@@ -11,8 +11,8 @@ namespace NeonRush.Presentation.World
     /// That is not contrarianism; the physics engine is the wrong tool for this specific game, for
     /// three concrete reasons:
     ///
-    ///  1. <b>Tunnelling.</b> At the 26 m/s speed cap, an obstacle moves ~0.43 m per frame at 60 fps
-    ///     and ~0.87 m at 30 fps. Obstacles are 1.2 m deep. On a phone that drops to 20 fps for a
+    ///  1. <b>Tunnelling.</b> At the 30 m/s speed cap, an obstacle moves ~0.50 m per frame at 60 fps
+    ///     and ~1.0 m at 30 fps. Obstacles are 1.2 m deep. On a phone that drops to 20 fps for a
     ///     moment, a discrete collider test can miss the overlap entirely and the player passes
     ///     straight through an obstacle. Unity's answer is continuous collision detection, which is
     ///     substantially more expensive — for a problem we do not need to have.
@@ -30,8 +30,9 @@ namespace NeonRush.Presentation.World
     {
         /// <summary>
         /// Half-depth of the window around the player that we bother testing, in metres.
-        /// Generously larger than the fastest per-frame step (~0.87 m at 30 fps) plus the deepest
-        /// object, so nothing can cross the window without being tested at least once.
+        /// Generously larger than the fastest per-frame step (~1.0 m at 30 fps, and 3.0 m at the
+        /// clamped worst case) plus the deepest object, so nothing can cross the window untested:
+        /// skipping the full 6 m window in one frame would take 60 m/s, twice the speed cap.
         /// </summary>
         private const float TestWindow = 3.0f;
 

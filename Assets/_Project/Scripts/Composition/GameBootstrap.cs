@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NeonRush.Application.Ads;
 using NeonRush.Application.Analytics;
 using NeonRush.Application.Config;
@@ -96,9 +97,21 @@ namespace NeonRush.Composition
         private CollisionSystem _collisions;
         private RunCameraRig _camera;
         private RunHud _hud;
+        private RunJuice _juice;
         private NeonMaterials _materials;
 
         private IDisposable _runEndedSubscription;
+        private IDisposable _milestoneSubscription;
+
+        /// <summary>Real-time seconds left on the death hit-stop. While positive, Time.timeScale is pinned to zero.</summary>
+        private float _hitStopRemaining;
+
+        /// <summary>
+        /// Length of the on-impact freeze, in REAL seconds. Long enough to register as a hit, short
+        /// enough not to read as a stutter. The freeze is what turns "the game stopped" into "I hit
+        /// something": for a beat the world holds still, then the shake releases it.
+        /// </summary>
+        private const float HitStopDuration = 0.07f;
 
         /// <summary>Set when a run ends; the next tap starts a new one.</summary>
         private bool _awaitingRestart;
@@ -288,6 +301,10 @@ namespace NeonRush.Composition
 
             _runEndedSubscription = _bus.Subscribe<RunEnded>(OnRunEnded);
 
+            // Each 100 m milestone punches the FOV and pulses the speed lines, so the difficulty
+            // ramp is something the player SEES arrive rather than only feels as "I keep dying".
+            _milestoneSubscription = _bus.Subscribe<DistanceMilestone>(OnMilestone);
+
             // Boot lands on the menu, not straight into a run: the daily claim and today's missions
             // are the first thing a returning player sees, and a new player gets one breath before
             // the game demands their reflexes.
@@ -386,6 +403,10 @@ namespace NeonRush.Composition
 
             _hud = new RunHud(_session, _bus, uiRoot, _wallet, _adDirector);
 
+            // The screen-space juice layer (impact flash + speed lines). Built on UI graphics so it
+            // ships no shader of its own — see RunJuice for why that matters on this project.
+            _juice = new RunJuice(uiRoot, _bus);
+
             _storeScreen = new StoreScreen(_catalog, _store, _wallet, _inventory, /*iap*/ ResolveIap(), _bus, uiRoot);
 
             _menu = new MainMenuScreen(_wallet, _profile, _missions, _daily, _bus, uiRoot);
@@ -413,6 +434,10 @@ namespace NeonRush.Composition
         private void OnMenuRequested()
         {
             _awaitingRestart = false;
+
+            // Take the death screen down explicitly — it is otherwise only hidden when a run
+            // starts, so without this it would linger on top of the main menu.
+            _hud.HideGameOver();
 
             _states.TransitionTo(GameState.MainMenu);
             _menu.Show();
@@ -458,6 +483,11 @@ namespace NeonRush.Composition
 
         private void StartRun()
         {
+            // A run must never begin frozen. If a hit-stop was somehow still in flight (the app was
+            // backgrounded mid-freeze, say), clear it here rather than starting the run in slow-mo.
+            _hitStopRemaining = 0f;
+            Time.timeScale = 1f;
+
             _states.TransitionTo(GameState.Playing);
 
             _player.Reset();
@@ -477,6 +507,13 @@ namespace NeonRush.Composition
             if (e.Cause == DeathCause.HitObstacle)
             {
                 _camera.Shake();
+
+                // Hit-stop. Freeze real gameplay time for a beat: the shake was queued just above
+                // but ticks on scaled time, so it cannot advance while frozen and instead releases
+                // the instant the freeze lifts — impact, THEN shake, the order the hand expects.
+                // Time.unscaledTime keeps counting, so the restart-arm timing below is unaffected.
+                _hitStopRemaining = HitStopDuration;
+                Time.timeScale = 0f;
             }
 
             _awaitingRestart = true;
@@ -497,6 +534,30 @@ namespace NeonRush.Composition
                 Debug.LogWarning(
                     "[NeonRush] Object pools grew during the run — pre-warm counts are too low. " +
                     "This causes a GC spike mid-run. Raise the prewarm values in TrackStreamer.");
+            }
+        }
+
+        private void OnMilestone(DistanceMilestone _)
+        {
+            _camera.PunchFov();
+            _juice.Surge();
+        }
+
+        /// <summary>
+        /// Releases the death hit-stop on the real clock. Runs before anything else in the frame so
+        /// no system acts on a frame that is meant to be frozen. Self-healing: if the app was
+        /// backgrounded during a freeze, the large unscaled delta on resume clears it at once.
+        /// </summary>
+        private void TickHitStop()
+        {
+            if (_hitStopRemaining <= 0f) return;
+
+            _hitStopRemaining -= Time.unscaledDeltaTime;
+
+            if (_hitStopRemaining <= 0f)
+            {
+                _hitStopRemaining = 0f;
+                Time.timeScale = 1f;
             }
         }
 
@@ -529,6 +590,10 @@ namespace NeonRush.Composition
 
         private void Update()
         {
+            // First: release any in-flight hit-stop, on the real clock. Must precede reading
+            // deltaTime, which it pins to zero while a freeze is active.
+            TickHitStop();
+
             var deltaTime = Time.deltaTime;
             var command = _input.Poll();
 
@@ -536,6 +601,10 @@ namespace NeonRush.Composition
             // A player sitting on the game-over screen with unsaved coins is exactly the player
             // most likely to background the app and never come back.
             _save.Tick(deltaTime);
+
+            // The juice layer animates on the UNSCALED clock, so the death flash keeps fading
+            // smoothly through the hit-stop; speed lines are gated to a live run by the flag.
+            _juice.Tick(Time.unscaledDeltaTime, NormalisedSpeed, _states.Current == GameState.Playing);
 
             switch (_states.Current)
             {
@@ -622,19 +691,65 @@ namespace NeonRush.Composition
                 return;
             }
 
-            // A tap that landed on a UI button (the SHOP button) must not ALSO restart the run. The
-            // EventSystem routes the click to the button; this check stops the same tap from being
-            // read a second time as "dismiss the death screen".
-            if (IsPointerOverUi()) return;
-
             if (command != SwipeCommand.None || WasTapped())
             {
+                // A tap that landed on a UI button (SHOP / MENU) must not ALSO dismiss the death
+                // screen and restart the run. We raycast the UI ourselves at the live pointer
+                // position rather than trusting EventSystem.IsPointerOverGameObject(): this
+                // component ticks at DefaultExecutionOrder(-1000), a full frame before the UI input
+                // module processes the pointer, so that flag is stale and reports "no UI here" on
+                // the very frame of the press. That let one tap both click MENU and restart — and
+                // then the late-firing MENU click threw on an illegal Playing -> MainMenu.
+                if (IsPointerOverUi()) return;
+
                 LeaveGameOver();
             }
         }
 
-        private static bool IsPointerOverUi() =>
-            EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+        // Reused across frames so the raycast below allocates nothing per call.
+        private readonly List<RaycastResult> _uiHits = new();
+
+        /// <summary>
+        /// True when the live pointer sits over any UI graphic (i.e. a death-screen button).
+        ///
+        /// Does its own <see cref="EventSystem.RaycastAll(PointerEventData, List{RaycastResult})"/>
+        /// at the current pointer position on purpose: <c>IsPointerOverGameObject()</c> returns the
+        /// input module's result from the previous frame, and this Update runs before the module
+        /// (see the call site), so the built-in helper is a frame stale exactly when it matters. A
+        /// fresh raycast is order-independent and correct.
+        /// </summary>
+        private bool IsPointerOverUi()
+        {
+            var events = EventSystem.current;
+            if (events == null) return false;
+            if (!TryGetPointerPosition(out var screenPosition)) return false;
+
+            var pointer = new PointerEventData(events) { position = screenPosition };
+            _uiHits.Clear();
+            events.RaycastAll(pointer, _uiHits);
+            return _uiHits.Count > 0;
+        }
+
+        private static bool TryGetPointerPosition(out Vector2 position)
+        {
+            var touch = UnityEngine.InputSystem.Touchscreen.current;
+            if (touch != null &&
+                (touch.primaryTouch.press.isPressed || touch.primaryTouch.press.wasReleasedThisFrame))
+            {
+                position = touch.primaryTouch.position.ReadValue();
+                return true;
+            }
+
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null)
+            {
+                position = mouse.position.ReadValue();
+                return true;
+            }
+
+            position = default;
+            return false;
+        }
 
         private void OfferDoubleCoins()
         {
@@ -717,6 +832,11 @@ namespace NeonRush.Composition
             // go of it before the bus dies, or the bus keeps the subscriber alive and the "leak"
             // shows up as a second HUD reacting to the next run.
             _runEndedSubscription?.Dispose();
+            _milestoneSubscription?.Dispose();
+
+            // A hit-stop that was mid-freeze when the scene tore down would otherwise leave the
+            // engine's global timeScale at zero for whatever loads next.
+            Time.timeScale = 1f;
 
             // SaveService.Dispose flushes on the way out, so it must run before the wallet and the
             // bus it reads from are torn down.
@@ -730,6 +850,7 @@ namespace NeonRush.Composition
             _menu?.Dispose();
             _storeScreen?.Dispose();
             _hud?.Dispose();
+            _juice?.Dispose();
             _track?.Dispose();
             _materials?.Dispose();
             _container?.Dispose();

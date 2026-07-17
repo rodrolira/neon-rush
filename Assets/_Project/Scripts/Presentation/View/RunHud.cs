@@ -63,8 +63,15 @@ namespace NeonRush.Presentation.View
             // so rewriting it every frame would dirty the Canvas and force a UI rebuild for nothing.
             _subscriptions.Add(bus.Subscribe<CurrencyChanged>(OnCurrencyChanged));
 
+            // A collected coin gives the counter a quick scale kick. Cheap, and it closes the
+            // feedback loop: the eye is on the track, not the HUD, so the pickup needs a flick of
+            // motion in the periphery to register as "got it" rather than a number silently ticking.
+            _subscriptions.Add(bus.Subscribe<CoinCollected>(_ => _coinPunch = 1f));
+
             SetBank(wallet.Balance(CurrencyType.Coins));
         }
+
+        private float _coinPunch;
 
         private void OnCurrencyChanged(CurrencyChanged e)
         {
@@ -78,6 +85,8 @@ namespace NeonRush.Presentation.View
         /// <summary>Refreshes the live counters. Called once per frame from the game loop.</summary>
         public void Tick()
         {
+            TickCoinPunch();
+
             if (!_session.IsRunning) return;
 
             if (_session.Score != _lastScore)
@@ -100,6 +109,17 @@ namespace NeonRush.Presentation.View
             }
         }
 
+        /// <summary>Eases the coin counter's scale back to rest after a pickup kick. Runs every frame, even between runs, so it always settles.</summary>
+        private void TickCoinPunch()
+        {
+            if (_coinPunch <= 0f) return;
+
+            _coinPunch = Mathf.Max(0f, _coinPunch - Time.deltaTime * 5f);
+
+            var scale = 1f + _coinPunch * 0.35f;
+            _coins.rectTransform.localScale = new Vector3(scale, scale, 1f);
+        }
+
         private void OnRunStarted(RunStarted _)
         {
             _gameOverPanel.SetActive(false);
@@ -117,6 +137,13 @@ namespace NeonRush.Presentation.View
 
             RefreshGameOverOffers();
         }
+
+        /// <summary>
+        /// Takes the death screen down without starting a run. Used when the player taps MENU:
+        /// the panel is otherwise only hidden when a run (re)starts, so without this it would
+        /// linger on top of the main menu.
+        /// </summary>
+        public void HideGameOver() => _gameOverPanel.SetActive(false);
 
         /// <summary>
         /// Redraws the death screen, including whichever ad offers are actually available right now.

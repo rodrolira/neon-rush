@@ -1,0 +1,8 @@
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/GameActivity/CMakeFiles/game.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/FramePacing/CMakeFiles/swappywrapper.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/FramePacing/CMakeFiles/edit_cache.dir
+C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/.utmp/Debug/221z1v5e/arm64-v8a/FramePacing/CMakeFiles/rebuild_cache.dir

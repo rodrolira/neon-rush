@@ -1,0 +1,12 @@
+# ninja log v5
+117	361	8059163897549023	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	c3088bf0b67459e2
+364	717	8059163900891144	C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/Debug/221z1v5e/obj/armeabi-v7a/libswappywrapper.so	d6efa753c2c40ec9
+1	2307	8059163916873185	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	1301216836bf4191
+40	2353	8059163917317839	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	3946a5ba3b891fd0
+70	2444	8059163918228408	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	9e7f4aa453dd99b1
+15	2471	8059163918530729	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	540fc73f1b0cd8f3
+85	2495	8059163918805638	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	a03d5a47a101b4c0
+99	2622	8059163920099620	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	1239b9f2e5173f2c
+54	2650	8059163920326324	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	d290f14088951a47
+27	2762	8059163921396811	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	4d15420aad18036
+2762	2982	8059163923684247	C:/Users/rlira/Desktop/Rorro/Programacion/Juegos/neon-rush/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/Debug/221z1v5e/obj/armeabi-v7a/libgame.so	4abbc542282cf47c

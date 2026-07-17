@@ -1,0 +1,63 @@
+<!--
+  IL2CPP managed-code stripping preserve list.
+
+  Why this file exists: the project builds with ManagedStrippingLevel.Medium (see
+  ProjectConfigurator), which deletes any type or member the compiler cannot see being used
+  statically. That is exactly right for our own code — but it is a trap for SDKs that resolve
+  types by reflection at runtime (Firebase, AdMob, Unity IAP all do). The stripper cannot see a
+  reflective use, deletes the type, and the SDK then throws a TypeLoadException on a real device
+  that never reproduces in the Editor. It is one of the most confusing classes of "works in
+  Editor, crashes on phone" bug there is.
+
+  This file tells the linker "keep these assemblies whole regardless". Each entry is commented
+  out until its SDK is actually installed — an assembly name that does not resolve is a build
+  warning, and we do not want warnings for SDKs that are not here yet. Uncomment the block for
+  each SDK as you add it.
+
+  Our OWN assemblies are deliberately NOT listed. They are referenced statically end to end, so
+  the stripper keeps exactly what is reachable — which is the whole point of stripping. Blanket-
+  preserving them would bloat the build for no reason.
+-->
+<linker>
+
+  <!-- Newtonsoft.Json: used by our save layer AND by Firebase. It serialises by reflecting over
+       type members, so stripping breaks round-trips in ways that only show on device. This one is
+       safe to keep active now, since the package is already installed. -->
+  <assembly fullname="Newtonsoft.Json" preserve="all" />
+
+  <!-- Primitive colliders. GameObject.CreatePrimitive attaches a collider to every primitive it
+       makes (BoxCollider for Cube, CapsuleCollider for Cylinder/Capsule). Neon Rush runs NO physics
+       — collision is a hand-rolled AABB test — so PrimitiveFactory strips that collider the instant
+       the primitive is born. But managed stripping, seeing no static reference to those collider
+       types anywhere in our code, deletes them from the build. On device the engine's CreatePrimitive
+       then can't attach the collider and logs "Can't add component because class 'CapsuleCollider'
+       doesn't exist!" for every pooled object — hundreds of red lines that never appear in the
+       Editor. Preserving the types lets CreatePrimitive add the collider cleanly, which StripCollider
+       then removes exactly as designed. The kept classes cost a few KB and zero runtime, since no
+       collider ever survives past the frame it was created in. -->
+  <assembly fullname="UnityEngine.PhysicsModule">
+    <type fullname="UnityEngine.BoxCollider" preserve="all" />
+    <type fullname="UnityEngine.CapsuleCollider" preserve="all" />
+    <type fullname="UnityEngine.SphereCollider" preserve="all" />
+    <type fullname="UnityEngine.MeshCollider" preserve="all" />
+  </assembly>
+
+  <!-- ==== Uncomment each block when its SDK is installed ====
+
+  <assembly fullname="Firebase.App" preserve="all" />
+  <assembly fullname="Firebase.Auth" preserve="all" />
+  <assembly fullname="Firebase.Firestore" preserve="all" />
+  <assembly fullname="Firebase.Analytics" preserve="all" />
+  <assembly fullname="Firebase.Messaging" preserve="all" />
+  <assembly fullname="Firebase.RemoteConfig" preserve="all" />
+  <assembly fullname="Firebase.Crashlytics" preserve="all" />
+
+  <assembly fullname="GoogleMobileAds" preserve="all" />
+  <assembly fullname="GoogleMobileAds.Common" preserve="all" />
+
+  <assembly fullname="UnityEngine.Purchasing" preserve="all" />
+  <assembly fullname="Stores" preserve="all" />
+
+  -->
+
+</linker>

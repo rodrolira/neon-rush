@@ -29,21 +29,23 @@ namespace NeonRush.Domain.Run
         /// <summary>
         /// Seconds to slide from one lane to the next. Tuning note: below ~0.10s the move reads
         /// as a teleport; above ~0.25s the game feels unresponsive and players blame the controls
-        /// for deaths that were their own fault. 0.15 is the sweet spot most runners land on.
+        /// for deaths that were their own fault. Sat at 0.10 — the snappy end of that window — on
+        /// a playtest call for faster lateral movement; the lean (PlayerMotor) still sells the
+        /// direction of the move at this speed, so it reads as sharp rather than as a teleport.
         /// </summary>
-        public float LaneChangeDuration { get; set; } = 0.15f;
+        public float LaneChangeDuration { get; set; } = 0.10f;
 
         // --- Speed ------------------------------------------------------------------------
 
         /// <summary>Forward speed at the start of a run, in metres/second.</summary>
-        public float BaseSpeed { get; set; } = 9f;
+        public float BaseSpeed { get; set; } = 11f;
 
         /// <summary>
         /// Speed added per metre travelled. Linear acceleration is intentional: exponential
         /// curves feel great for 30 seconds and then become impossible, which caps session
         /// length and therefore caps ad impressions per session.
         /// </summary>
-        public float SpeedGainPerMetre { get; set; } = 0.012f;
+        public float SpeedGainPerMetre { get; set; } = 0.015f;
 
         /// <summary>
         /// Hard ceiling on forward speed. This exists for a concrete reason: obstacles are
@@ -51,7 +53,7 @@ namespace NeonRush.Domain.Run
         /// cannot see and react to them within human reaction time (~250 ms). Past that point
         /// deaths stop feeling earned and start feeling cheap, and players churn.
         /// </summary>
-        public float MaxSpeed { get; set; } = 26f;
+        public float MaxSpeed { get; set; } = 30f;
 
         // --- Jump and slide ---------------------------------------------------------------
 

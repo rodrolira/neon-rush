@@ -109,6 +109,59 @@ namespace NeonRush.EditorTools.Setup
 
             GraphicsSettings.defaultRenderPipeline = pipeline;
             QualitySettings.renderPipeline = pipeline;
+
+            EnsureRuntimeShadersIncluded();
+        }
+
+        /// <summary>
+        /// Forces the shaders the game resolves at runtime into the build's "Always Included Shaders".
+        ///
+        /// Neon Rush builds every material in code via <c>Shader.Find("Universal Render Pipeline/Lit")</c>
+        /// (see NeonMaterials). No material asset in any scene references that shader, so Unity's build
+        /// pipeline — correctly, from its point of view — strips it as unused. On device <c>Shader.Find</c>
+        /// then returns null, NeonMaterials throws, and the player sees a black screen with a red error.
+        /// It never reproduces in the Editor, where every shader is always loaded. This is the canonical
+        /// "works in Editor, black on phone" trap for a game with no baked materials, and the fix is to
+        /// pin the shader here so it ships regardless of what references it.
+        /// </summary>
+        private static void EnsureRuntimeShadersIncluded()
+        {
+            // Every runtime material routes through this one shader (NeonMaterials.Get). If more
+            // Shader.Find names appear later (e.g. an Unlit trail), add them here — the symptom is
+            // always the same black screen.
+            string[] required = { "Universal Render Pipeline/Lit" };
+
+            var serialized = new SerializedObject(GraphicsSettings.GetGraphicsSettings());
+            var list = serialized.FindProperty("m_AlwaysIncludedShaders");
+
+            foreach (var name in required)
+            {
+                var shader = Shader.Find(name);
+                if (shader == null)
+                {
+                    Debug.LogWarning($"[ProjectConfigurator] Shader '{name}' not found in the Editor; cannot pin it for the build.");
+                    continue;
+                }
+
+                if (IsAlreadyIncluded(list, shader)) continue;
+
+                var i = list.arraySize;
+                list.InsertArrayElementAtIndex(i);
+                list.GetArrayElementAtIndex(i).objectReferenceValue = shader;
+                Debug.Log($"[ProjectConfigurator] Pinned '{name}' into Always Included Shaders so it survives the build.");
+            }
+
+            serialized.ApplyModifiedProperties();
+        }
+
+        private static bool IsAlreadyIncluded(SerializedProperty list, Shader shader)
+        {
+            for (var i = 0; i < list.arraySize; i++)
+            {
+                if (list.GetArrayElementAtIndex(i).objectReferenceValue == shader) return true;
+            }
+
+            return false;
         }
 
         /// <summary>
