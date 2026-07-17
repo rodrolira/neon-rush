@@ -296,6 +296,9 @@ namespace NeonRush.Infrastructure.Save
             public bool battlePassPremiumOwned;
             public int[] battlePassClaimedFree;
             public int[] battlePassClaimedPremium;
+            public long starterPackFirstSeenUtcTicks;
+            public long subscriptionExpiryUtcTicks;
+            public long subscriptionLastDailyGrantUtcTicks;
 
             [Serializable]
             public sealed class MissionDto
@@ -327,6 +330,9 @@ namespace NeonRush.Infrastructure.Save
                 battlePassPremiumOwned = data.BattlePassPremiumOwned,
                 battlePassClaimedFree = data.BattlePassClaimedFree?.ToArray() ?? Array.Empty<int>(),
                 battlePassClaimedPremium = data.BattlePassClaimedPremium?.ToArray() ?? Array.Empty<int>(),
+                starterPackFirstSeenUtcTicks = data.StarterPackFirstSeenUtc.Ticks,
+                subscriptionExpiryUtcTicks = data.SubscriptionExpiryUtc.Ticks,
+                subscriptionLastDailyGrantUtcTicks = data.SubscriptionLastDailyGrantUtc.Ticks,
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
 
@@ -371,6 +377,9 @@ namespace NeonRush.Infrastructure.Save
                 BattlePassPremiumOwned = battlePassPremiumOwned,
                 BattlePassClaimedFree = ToIntList(battlePassClaimedFree),
                 BattlePassClaimedPremium = ToIntList(battlePassClaimedPremium),
+                StarterPackFirstSeenUtc = TicksToUtc(starterPackFirstSeenUtcTicks),
+                SubscriptionExpiryUtc = TicksToUtc(subscriptionExpiryUtcTicks),
+                SubscriptionLastDailyGrantUtc = TicksToUtc(subscriptionLastDailyGrantUtcTicks),
 
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save

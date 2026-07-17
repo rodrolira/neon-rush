@@ -82,6 +82,19 @@ namespace NeonRush.Domain.Save
         /// <summary>Premium-track tier levels already claimed.</summary>
         public List<int> BattlePassClaimedPremium { get; set; } = new();
 
+        // --- Starter pack (schema v2) ---
+
+        /// <summary>UTC instant the starter-pack offer was first shown, which starts its one-shot window. MinValue = never shown.</summary>
+        public DateTime StarterPackFirstSeenUtc { get; set; }
+
+        // --- VIP subscription (schema v2) ---
+
+        /// <summary>When the VIP subscription lapses. MinValue = never subscribed. A paid entitlement — restored before the first ad decision.</summary>
+        public DateTime SubscriptionExpiryUtc { get; set; }
+
+        /// <summary>UTC instant of the last VIP daily-gem grant, so it pays at most once per UTC day across restarts.</summary>
+        public DateTime SubscriptionLastDailyGrantUtc { get; set; }
+
         /// <summary>One mission's persisted state. Flat and dumb on purpose — it is a wire format.</summary>
         public sealed class MissionSave
         {
@@ -123,6 +136,9 @@ namespace NeonRush.Domain.Save
             BattlePassPremiumOwned = BattlePassPremiumOwned,
             BattlePassClaimedFree = new List<int>(BattlePassClaimedFree),
             BattlePassClaimedPremium = new List<int>(BattlePassClaimedPremium),
+            StarterPackFirstSeenUtc = StarterPackFirstSeenUtc,
+            SubscriptionExpiryUtc = SubscriptionExpiryUtc,
+            SubscriptionLastDailyGrantUtc = SubscriptionLastDailyGrantUtc,
         };
 
         private List<MissionSave> CloneMissions()
@@ -157,6 +173,9 @@ namespace NeonRush.Domain.Save
             BattlePassPremiumOwned = false,
             BattlePassClaimedFree = new List<int>(),
             BattlePassClaimedPremium = new List<int>(),
+            StarterPackFirstSeenUtc = DateTime.MinValue,
+            SubscriptionExpiryUtc = DateTime.MinValue,
+            SubscriptionLastDailyGrantUtc = DateTime.MinValue,
         };
     }
 

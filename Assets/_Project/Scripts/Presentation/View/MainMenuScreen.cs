@@ -57,6 +57,9 @@ namespace NeonRush.Presentation.View
         /// <summary>Raised when the player opens the battle pass.</summary>
         public event Action PassRequested;
 
+        /// <summary>Raised when the player opens the VIP subscription screen.</summary>
+        public event Action VipRequested;
+
         public MainMenuScreen(
             Wallet wallet,
             PlayerProfile profile,
@@ -182,13 +185,16 @@ namespace NeonRush.Presentation.View
 
         private void BuildFooter(Transform parent)
         {
-            // Two buttons side by side: SHOP (spend) and PASS (the season's rewards). Neither is the
-            // dominant affordance — that is the tap-anywhere backdrop — but both are one glance away.
-            BuildFooterButton(parent, "Shop", "SHOP", new Vector2(-210f, 70f),
+            // Three glanceable entries across the bottom: SHOP (spend), PASS (season rewards), VIP
+            // (subscription). None is the dominant affordance — that is the tap-anywhere backdrop.
+            BuildFooterButton(parent, "Shop", "SHOP", new Vector2(-340f, 70f),
                 new Color(0.55f, 0.35f, 0.85f), () => ShopRequested?.Invoke());
 
-            BuildFooterButton(parent, "Pass", "PASS", new Vector2(210f, 70f),
+            BuildFooterButton(parent, "Pass", "PASS", new Vector2(0f, 70f),
                 new Color(0.16f, 0.6f, 0.45f), () => PassRequested?.Invoke());
+
+            BuildFooterButton(parent, "Vip", "★ VIP", new Vector2(340f, 70f),
+                new Color(0.72f, 0.52f, 0.16f), () => VipRequested?.Invoke());
 
             var hint = Label(parent, "Hint", new Vector2(0.5f, 0f), new Vector2(0f, 200f), TextAnchor.LowerCenter, 30);
             hint.text = "tap anywhere to run";
@@ -204,7 +210,7 @@ namespace NeonRush.Presentation.View
             rect.anchorMin = new Vector2(0.5f, 0f);
             rect.anchorMax = new Vector2(0.5f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
-            rect.sizeDelta = new Vector2(380f, 110f);
+            rect.sizeDelta = new Vector2(320f, 110f);
             rect.anchoredPosition = position;
 
             go.GetComponent<Image>().color = colour;

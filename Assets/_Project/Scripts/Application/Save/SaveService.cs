@@ -58,6 +58,12 @@ namespace NeonRush.Application.Save
         /// <summary>Optional, same pattern. Its snapshot (season XP, premium, claimed tiers) is persisted.</summary>
         public BattlePass.BattlePassService BattlePass { get; set; }
 
+        /// <summary>Optional, same pattern. Only its first-seen timestamp needs persisting (the window's start).</summary>
+        public Store.StarterPackService StarterPack { get; set; }
+
+        /// <summary>Optional, same pattern. Its expiry and last daily-grant timestamps are persisted.</summary>
+        public Subscription.SubscriptionService Vip { get; set; }
+
         private readonly List<IDisposable> _subscriptions = new();
 
         private bool _dirty;
@@ -105,6 +111,9 @@ namespace NeonRush.Application.Save
             // Buying the premium pass is a paid entitlement — flush it to disk at once, exactly like
             // a store purchase, so a kill immediately afterwards can never lose it.
             _subscriptions.Add(bus.Subscribe<NeonRush.Domain.BattlePass.BattlePassPremiumUnlocked>(_ => Flush()));
+
+            // The VIP subscription is a paid, time-limited entitlement — flush its new expiry at once.
+            _subscriptions.Add(bus.Subscribe<NeonRush.Domain.Subscription.SubscriptionActivated>(_ => Flush()));
         }
 
         /// <summary>The catalogue id of the ad-removal product.</summary>
@@ -201,6 +210,17 @@ namespace NeonRush.Application.Save
                 data.BattlePassPremiumOwned = bp.PremiumOwned;
                 data.BattlePassClaimedFree = new List<int>(bp.ClaimedFree);
                 data.BattlePassClaimedPremium = new List<int>(bp.ClaimedPremium);
+            }
+
+            if (StarterPack != null)
+            {
+                data.StarterPackFirstSeenUtc = StarterPack.FirstSeenUtc;
+            }
+
+            if (Vip != null)
+            {
+                data.SubscriptionExpiryUtc = Vip.ExpiryUtc;
+                data.SubscriptionLastDailyGrantUtc = Vip.LastDailyGrantUtc;
             }
 
             _profile.WriteTo(data);

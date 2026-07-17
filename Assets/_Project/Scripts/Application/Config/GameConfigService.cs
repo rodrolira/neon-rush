@@ -1,5 +1,6 @@
 using System;
 using NeonRush.Application.BattlePass;
+using NeonRush.Application.Subscription;
 using NeonRush.Domain.Ads;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Run;
@@ -159,6 +160,39 @@ namespace NeonRush.Application.Config
         }
 
         // -------------------------------------------------------------------------------
+        // VIP subscription
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Builds the VIP subscription's terms from remote values over the compiled defaults, clamped.
+        /// The perks are the lever LiveOps tunes against retention and ARPU; the clamps stop a bad push
+        /// from making VIP either worthless (multiplier 1, zero gems) or economy-breaking (a 1000x
+        /// multiplier). The price is deliberately absent — it belongs to the platform store.
+        /// </summary>
+        public SubscriptionConfig BuildSubscriptionConfig()
+        {
+            var d = new SubscriptionConfig();
+
+            var config = new SubscriptionConfig
+            {
+                Enabled = _remote.GetBool(RemoteConfigKeys.VipEnabled, d.Enabled),
+                DurationDays = ClampInt(_remote.GetInt(RemoteConfigKeys.VipDurationDays, d.DurationDays), 1, 366),
+                DailyGems = ClampInt(_remote.GetInt(RemoteConfigKeys.VipDailyGems, d.DailyGems), 0, 100_000),
+                CoinMultiplier = Clamp(_remote.GetFloat(RemoteConfigKeys.VipCoinMultiplier, d.CoinMultiplier), 1f, 100f),
+            };
+
+            try
+            {
+                config.Validate();
+                return config;
+            }
+            catch (ArgumentException)
+            {
+                return d;
+            }
+        }
+
+        // -------------------------------------------------------------------------------
         // Store prices
         // -------------------------------------------------------------------------------
 
@@ -194,6 +228,12 @@ namespace NeonRush.Application.Config
         // -------------------------------------------------------------------------------
         // Feature flags
         // -------------------------------------------------------------------------------
+
+        /// <summary>Whether the starter-pack offer is shown at all. Lets LiveOps pull it instantly for a cohort or a bug.</summary>
+        public bool StarterPackEnabled => _remote.GetBool(RemoteConfigKeys.StarterPackEnabled, true);
+
+        /// <summary>How long the starter-pack window stays open once first seen, in hours. Clamped 1h..30d.</summary>
+        public int StarterPackWindowHours => ClampInt(_remote.GetInt(RemoteConfigKeys.StarterPackWindowHours, 48), 1, 24 * 30);
 
         /// <summary>Whether the "double your coins" rewarded offer is enabled. Lets LiveOps kill a misbehaving offer instantly.</summary>
         public bool DoubleCoinsEnabled => _remote.GetBool(RemoteConfigKeys.DoubleCoinsEnabled, true);

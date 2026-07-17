@@ -30,6 +30,9 @@ namespace NeonRush.Domain.Store
 
         /// <summary>Removes interstitial ads permanently.</summary>
         AdRemoval = 7,
+
+        /// <summary>An auto-renewing VIP subscription. Time-based, so it is re-buyable rather than owned.</summary>
+        Subscription = 8,
     }
 
     /// <summary>What an item costs. Exactly one of the two payment rails.</summary>
@@ -135,11 +138,12 @@ namespace NeonRush.Domain.Store
         public IReadOnlyList<string> GrantsItems { get; set; } = Array.Empty<string>();
 
         /// <summary>
-        /// True when this item can be bought repeatedly (currency packs).
-        /// Cosmetics are one-shot: buying a skin you already own must be impossible, not merely
-        /// discouraged, or a mis-tap costs a player 500 gems and costs you a support ticket.
+        /// True when this item can be bought repeatedly (currency packs, and the renewable VIP
+        /// subscription). Cosmetics are one-shot: buying a skin you already own must be impossible,
+        /// not merely discouraged, or a mis-tap costs a player 500 gems and costs you a support
+        /// ticket. A subscription is the other case entirely — you are MEANT to buy it again.
         /// </summary>
-        public bool IsConsumable => Kind == ItemKind.CurrencyPack;
+        public bool IsConsumable => Kind == ItemKind.CurrencyPack || Kind == ItemKind.Subscription;
     }
 
     /// <summary>
@@ -216,6 +220,13 @@ namespace NeonRush.Domain.Store
 
             catalog.Add(new StoreItem("no_ads", "Remove Ads", ItemKind.AdRemoval,
                 Price.InRealMoney("com.mooncatstudio.neonrush.noads")));
+
+            // VIP subscription. Auto-renewing real-money product; the client grants nothing directly
+            // (SubscriptionService reacts to the completed purchase and extends the active period).
+            // Its perks — double coins, a daily gem stipend, no interstitials — are worth far more
+            // than any single pack, which is exactly why recurring revenue dominates a runner's LTV.
+            catalog.Add(new StoreItem("vip_monthly", "VIP — Monthly", ItemKind.Subscription,
+                Price.InRealMoney("com.mooncatstudio.neonrush.vip_monthly")));
 
             return catalog;
         }

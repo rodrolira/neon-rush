@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NeonRush.Application.Ads;
 using NeonRush.Application.BattlePass;
+using NeonRush.Application.Subscription;
 using NeonRush.Application.Analytics;
 using NeonRush.Application.Config;
 using NeonRush.Application.Economy;
@@ -91,8 +92,12 @@ namespace NeonRush.Composition
         private NeonRush.Application.Missions.MissionService _missions;
         private Domain.Retention.DailyRewardService _daily;
         private BattlePassService _battlePass;
+        private StarterPackService _starterPack;
+        private SubscriptionService _vip;
         private MainMenuScreen _menu;
         private BattlePassScreen _battlePassScreen;
+        private StarterPackOfferScreen _starterPackScreen;
+        private VipScreen _vipScreen;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -105,6 +110,7 @@ namespace NeonRush.Composition
 
         private IDisposable _runEndedSubscription;
         private IDisposable _milestoneSubscription;
+        private IDisposable _subscriptionAdSub;
 
         /// <summary>Real-time seconds left on the death hit-stop. While positive, Time.timeScale is pinned to zero.</summary>
         private float _hitStopRemaining;
@@ -313,6 +319,43 @@ namespace NeonRush.Composition
             _container.RegisterInstance(_battlePass);
             _save.BattlePass = _battlePass;
 
+            // --- Starter pack ---------------------------------------------------------------
+            //
+            // Sells the catalogue's bundle_starter through the ordinary store; this only adds the
+            // one-shot window and the ownership gate. The window's start is restored from the save so
+            // a player cannot reset the countdown by relaunching.
+            var starterOffer = new Domain.Store.StarterPackOffer(_config.StarterPackWindowHours);
+            _starterPack = new StarterPackService(
+                starterOffer, _inventory, clock, _config.StarterPackEnabled, loaded.Data.StarterPackFirstSeenUtc);
+            _container.RegisterInstance(_starterPack);
+            _save.StarterPack = _starterPack;
+
+            // --- VIP subscription -----------------------------------------------------------
+            //
+            // Recurring revenue. The purchase is the ordinary store flow (vip_monthly); this service
+            // turns the completed purchase into an active period and pays the perks. The active window
+            // is restored from the save so a relaunch cannot reset it.
+            var vipState = new Domain.Subscription.Subscription(
+                loaded.Data.SubscriptionExpiryUtc, loaded.Data.SubscriptionLastDailyGrantUtc);
+            _vip = new SubscriptionService(vipState, _wallet, clock, _config.BuildSubscriptionConfig(), _bus);
+            _container.RegisterInstance(_vip);
+            _save.Vip = _vip;
+
+            // VIP includes ad-freedom. Silence interstitials now if the sub is already live (restored
+            // from the save), and again whenever it activates mid-session. It is re-evaluated at each
+            // boot, so a lapsed sub quietly gets its interstitials back on the next launch.
+            if (_vip.IsActive)
+            {
+                ads.DisableInterstitials();
+                adPolicy.DisableInterstitials();
+            }
+
+            _subscriptionAdSub = _bus.Subscribe<Domain.Subscription.SubscriptionActivated>(_ =>
+            {
+                ads.DisableInterstitials();
+                adPolicy.DisableInterstitials();
+            });
+
             BuildScene();
 
             // Kick the async fetch AFTER the game is fully built and playable on defaults. When it
@@ -333,6 +376,7 @@ namespace NeonRush.Composition
             // the game demands their reflexes.
             _states.TransitionTo(GameState.MainMenu);
             _menu.Show();
+            MaybeOfferStarterPack();
         }
 
         private void BuildScene()
@@ -434,10 +478,15 @@ namespace NeonRush.Composition
 
             _battlePassScreen = new BattlePassScreen(_battlePass, _wallet, _bus, uiRoot);
 
+            _starterPackScreen = new StarterPackOfferScreen(_catalog, _store, ResolveIap(), _starterPack, uiRoot);
+
+            _vipScreen = new VipScreen(_catalog, _store, ResolveIap(), _vip, _bus, uiRoot);
+
             _menu = new MainMenuScreen(_wallet, _profile, _missions, _daily, _bus, uiRoot);
             _menu.StartRequested += OnMenuStartRequested;
             _menu.ShopRequested += () => _storeScreen.Show();
             _menu.PassRequested += () => _battlePassScreen.Show();
+            _menu.VipRequested += () => _vipScreen.Show();
 
             // The SHOP button lives on the death screen (the natural spend moment); tapping it opens
             // the store overlay. The store closes itself via its own CLOSE button. MENU returns to
@@ -467,6 +516,27 @@ namespace NeonRush.Composition
 
             _states.TransitionTo(GameState.MainMenu);
             _menu.Show();
+
+            // Returning to the menu after a run is a high-intent moment; pitch the starter pack here
+            // too (once per session, only if still available and unbought).
+            MaybeOfferStarterPack();
+        }
+
+        /// <summary>
+        /// Puts the starter-pack offer in front of the player if now is a good moment: it is enabled,
+        /// unbought, unexpired, not already shown this session, and the player has actually played at
+        /// least once — a purchase popup must never be the very first thing a fresh install sees.
+        /// </summary>
+        private void MaybeOfferStarterPack()
+        {
+            if (_starterPack == null || _starterPackScreen == null) return;
+            if (_starterPackScreen.IsOpen || _starterPack.ShownThisSession) return;
+            if (_profile.TotalRuns <= 0) return;
+            if (!_starterPack.ShouldOffer()) return;
+
+            _starterPack.MarkSeen();
+            _save.MarkDirty();
+            _starterPackScreen.Show();
         }
 
         private IIapService ResolveIap() => _container.Resolve<IIapService>();
@@ -631,6 +701,9 @@ namespace NeonRush.Composition
             // The juice layer animates on the UNSCALED clock, so the death flash keeps fading
             // smoothly through the hit-stop; speed lines are gated to a live run by the flag.
             _juice.Tick(Time.unscaledDeltaTime, NormalisedSpeed, _states.Current == GameState.Playing);
+
+            // The starter-pack countdown ticks on real time while its popup is open; a no-op otherwise.
+            _starterPackScreen.Tick();
 
             switch (_states.Current)
             {
@@ -859,6 +932,7 @@ namespace NeonRush.Composition
             // shows up as a second HUD reacting to the next run.
             _runEndedSubscription?.Dispose();
             _milestoneSubscription?.Dispose();
+            _subscriptionAdSub?.Dispose();
 
             // A hit-stop that was mid-freeze when the scene tore down would otherwise leave the
             // engine's global timeScale at zero for whatever loads next.
@@ -872,11 +946,14 @@ namespace NeonRush.Composition
             _analyticsReporter?.Dispose();
             _missions?.Dispose();
             _battlePass?.Dispose();
+            _vip?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
             _menu?.Dispose();
             _storeScreen?.Dispose();
             _battlePassScreen?.Dispose();
+            _starterPackScreen?.Dispose();
+            _vipScreen?.Dispose();
             _hud?.Dispose();
             _juice?.Dispose();
             _track?.Dispose();

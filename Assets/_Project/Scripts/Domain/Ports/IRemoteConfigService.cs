@@ -82,6 +82,16 @@ namespace NeonRush.Domain.Ports
         public const string BattlePassXpPerCoin = "bp_xp_per_coin";
         public const string BattlePassPremiumGemPrice = "bp_premium_gem_price";
 
+        // --- Starter pack ---
+        public const string StarterPackEnabled = "starter_pack_enabled";
+        public const string StarterPackWindowHours = "starter_pack_window_hours";
+
+        // --- VIP subscription (perks; the price is owned by the platform store) ---
+        public const string VipEnabled = "vip_enabled";
+        public const string VipDurationDays = "vip_duration_days";
+        public const string VipDailyGems = "vip_daily_gems";
+        public const string VipCoinMultiplier = "vip_coin_multiplier";
+
         // --- Store prices (currency items only; real-money prices come from the platform store) ---
         // Convention: "price_" + itemId. Kept as a helper so a new item does not need a new constant.
         public static string PriceKeyFor(string itemId) => "price_" + itemId;
