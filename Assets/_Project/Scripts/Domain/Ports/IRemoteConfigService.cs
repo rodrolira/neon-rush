@@ -77,6 +77,11 @@ namespace NeonRush.Domain.Ports
         public const string DoubleCoinsEnabled = "econ_double_coins_enabled";
         public const string ReviveEnabled = "econ_revive_enabled";
 
+        // --- Battle pass (pacing scalars; the reward ladder is compiled content) ---
+        public const string BattlePassXpPerMetre = "bp_xp_per_metre";
+        public const string BattlePassXpPerCoin = "bp_xp_per_coin";
+        public const string BattlePassPremiumGemPrice = "bp_premium_gem_price";
+
         // --- Store prices (currency items only; real-money prices come from the platform store) ---
         // Convention: "price_" + itemId. Kept as a helper so a new item does not need a new constant.
         public static string PriceKeyFor(string itemId) => "price_" + itemId;

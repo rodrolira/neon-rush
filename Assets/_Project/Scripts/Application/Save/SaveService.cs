@@ -54,6 +54,10 @@ namespace NeonRush.Application.Save
 
         /// <summary>Optional, same pattern as <see cref="DailyRewards"/>.</summary>
         public Missions.MissionService Missions { get; set; }
+
+        /// <summary>Optional, same pattern. Its snapshot (season XP, premium, claimed tiers) is persisted.</summary>
+        public BattlePass.BattlePassService BattlePass { get; set; }
+
         private readonly List<IDisposable> _subscriptions = new();
 
         private bool _dirty;
@@ -92,6 +96,15 @@ namespace NeonRush.Application.Save
                 if (e.ItemId == AdRemovalItemId) _adsRemoved = true;
                 Flush();
             }));
+
+            // A claimed tier changes the pass's claimed-set, which must persist or a reload would let
+            // the reward be taken again. Coin/gem/item grants already mark dirty on their own, but the
+            // claimed-set is the authoritative "already paid" record, so mark on the claim itself too.
+            _subscriptions.Add(bus.Subscribe<NeonRush.Domain.BattlePass.BattlePassRewardClaimed>(_ => MarkDirty()));
+
+            // Buying the premium pass is a paid entitlement — flush it to disk at once, exactly like
+            // a store purchase, so a kill immediately afterwards can never lose it.
+            _subscriptions.Add(bus.Subscribe<NeonRush.Domain.BattlePass.BattlePassPremiumUnlocked>(_ => Flush()));
         }
 
         /// <summary>The catalogue id of the ad-removal product.</summary>
@@ -178,6 +191,16 @@ namespace NeonRush.Application.Save
                         Rewarded = mission.Rewarded,
                     });
                 }
+            }
+
+            if (BattlePass != null)
+            {
+                var bp = BattlePass.Snapshot();
+                data.BattlePassSeasonId = bp.SeasonId;
+                data.BattlePassXp = bp.Xp;
+                data.BattlePassPremiumOwned = bp.PremiumOwned;
+                data.BattlePassClaimedFree = new List<int>(bp.ClaimedFree);
+                data.BattlePassClaimedPremium = new List<int>(bp.ClaimedPremium);
             }
 
             _profile.WriteTo(data);

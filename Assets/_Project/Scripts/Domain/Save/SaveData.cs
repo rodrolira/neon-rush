@@ -26,8 +26,8 @@ namespace NeonRush.Domain.Save
         /// </summary>
         public int Version { get; set; } = CurrentVersion;
 
-        /// <summary>The schema version this build writes.</summary>
-        public const int CurrentVersion = 1;
+        /// <summary>The schema version this build writes. v2 added the battle-pass block.</summary>
+        public const int CurrentVersion = 2;
 
         public int Coins { get; set; }
 
@@ -65,6 +65,23 @@ namespace NeonRush.Domain.Save
         /// <summary>Progress of today's missions. One entry per active mission.</summary>
         public List<MissionSave> Missions { get; set; } = new();
 
+        // --- Battle pass (schema v2) ---
+
+        /// <summary>The season the saved pass progress belongs to. A different live season discards it (see BattlePassState).</summary>
+        public string BattlePassSeasonId { get; set; } = string.Empty;
+
+        /// <summary>Season XP accumulated on the current pass.</summary>
+        public int BattlePassXp { get; set; }
+
+        /// <summary>True once the premium pass is owned for this season. A paid entitlement — never dropped.</summary>
+        public bool BattlePassPremiumOwned { get; set; }
+
+        /// <summary>Free-track tier levels already claimed, so a reload can never re-pay them.</summary>
+        public List<int> BattlePassClaimedFree { get; set; } = new();
+
+        /// <summary>Premium-track tier levels already claimed.</summary>
+        public List<int> BattlePassClaimedPremium { get; set; } = new();
+
         /// <summary>One mission's persisted state. Flat and dumb on purpose — it is a wire format.</summary>
         public sealed class MissionSave
         {
@@ -100,6 +117,12 @@ namespace NeonRush.Domain.Save
             DailyStreakDays = DailyStreakDays,
             MissionDay = MissionDay,
             Missions = CloneMissions(),
+
+            BattlePassSeasonId = BattlePassSeasonId,
+            BattlePassXp = BattlePassXp,
+            BattlePassPremiumOwned = BattlePassPremiumOwned,
+            BattlePassClaimedFree = new List<int>(BattlePassClaimedFree),
+            BattlePassClaimedPremium = new List<int>(BattlePassClaimedPremium),
         };
 
         private List<MissionSave> CloneMissions()
@@ -129,6 +152,11 @@ namespace NeonRush.Domain.Save
             DailyStreakDays = 0,
             MissionDay = 0,
             Missions = new List<MissionSave>(),
+            BattlePassSeasonId = string.Empty,
+            BattlePassXp = 0,
+            BattlePassPremiumOwned = false,
+            BattlePassClaimedFree = new List<int>(),
+            BattlePassClaimedPremium = new List<int>(),
         };
     }
 

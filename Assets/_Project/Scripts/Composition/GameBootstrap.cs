@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NeonRush.Application.Ads;
+using NeonRush.Application.BattlePass;
 using NeonRush.Application.Analytics;
 using NeonRush.Application.Config;
 using NeonRush.Application.Economy;
@@ -89,7 +90,9 @@ namespace NeonRush.Composition
         private AnalyticsReporter _analyticsReporter;
         private NeonRush.Application.Missions.MissionService _missions;
         private Domain.Retention.DailyRewardService _daily;
+        private BattlePassService _battlePass;
         private MainMenuScreen _menu;
+        private BattlePassScreen _battlePassScreen;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -290,6 +293,26 @@ namespace NeonRush.Composition
             _store = new StoreService(_catalog, _wallet, _inventory, iap, validator, ads, _bus);
             _container.RegisterInstance(_store);
 
+            // --- Battle pass ----------------------------------------------------------------
+            //
+            // The reward ladder is compiled content (a complete default season); Remote Config tunes
+            // only the pacing scalars. Progress is restored from the save via a snapshot, which the
+            // Domain discards on its own if it belongs to a past season — so a season rollover needs
+            // no special-casing here. Rewards route through the same wallet and inventory as
+            // everything else, tagged SeasonPassReward so the economy dashboard can attribute them.
+            var bpTrack = Domain.BattlePass.BattlePassTrack.Default();
+            var bpSnapshot = new Domain.BattlePass.BattlePassSnapshot(
+                loaded.Data.BattlePassSeasonId,
+                loaded.Data.BattlePassXp,
+                loaded.Data.BattlePassPremiumOwned,
+                loaded.Data.BattlePassClaimedFree,
+                loaded.Data.BattlePassClaimedPremium);
+
+            var bpState = new Domain.BattlePass.BattlePassState(bpTrack, _bus, bpSnapshot);
+            _battlePass = new BattlePassService(bpState, _wallet, _inventory, _config.BuildBattlePassConfig(), _bus);
+            _container.RegisterInstance(_battlePass);
+            _save.BattlePass = _battlePass;
+
             BuildScene();
 
             // Kick the async fetch AFTER the game is fully built and playable on defaults. When it
@@ -409,9 +432,12 @@ namespace NeonRush.Composition
 
             _storeScreen = new StoreScreen(_catalog, _store, _wallet, _inventory, /*iap*/ ResolveIap(), _bus, uiRoot);
 
+            _battlePassScreen = new BattlePassScreen(_battlePass, _wallet, _bus, uiRoot);
+
             _menu = new MainMenuScreen(_wallet, _profile, _missions, _daily, _bus, uiRoot);
             _menu.StartRequested += OnMenuStartRequested;
             _menu.ShopRequested += () => _storeScreen.Show();
+            _menu.PassRequested += () => _battlePassScreen.Show();
 
             // The SHOP button lives on the death screen (the natural spend moment); tapping it opens
             // the store overlay. The store closes itself via its own CLOSE button. MENU returns to
@@ -845,10 +871,12 @@ namespace NeonRush.Composition
             _adDirector?.Dispose();
             _analyticsReporter?.Dispose();
             _missions?.Dispose();
+            _battlePass?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
             _menu?.Dispose();
             _storeScreen?.Dispose();
+            _battlePassScreen?.Dispose();
             _hud?.Dispose();
             _juice?.Dispose();
             _track?.Dispose();

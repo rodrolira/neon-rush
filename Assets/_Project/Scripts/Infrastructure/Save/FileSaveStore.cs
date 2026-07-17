@@ -289,6 +289,14 @@ namespace NeonRush.Infrastructure.Save
             public int missionDay;
             public MissionDto[] missions;
 
+            // Battle pass (schema v2). Absent in a v1 save; JsonUtility leaves them at defaults,
+            // which ToDomain treats as "no pass progress yet" — a clean, crashless migration.
+            public string battlePassSeasonId;
+            public int battlePassXp;
+            public bool battlePassPremiumOwned;
+            public int[] battlePassClaimedFree;
+            public int[] battlePassClaimedPremium;
+
             [Serializable]
             public sealed class MissionDto
             {
@@ -314,6 +322,11 @@ namespace NeonRush.Infrastructure.Save
                 dailyStreakDays = data.DailyStreakDays,
                 missionDay = data.MissionDay,
                 missions = ToMissionDtos(data),
+                battlePassSeasonId = data.BattlePassSeasonId ?? string.Empty,
+                battlePassXp = data.BattlePassXp,
+                battlePassPremiumOwned = data.BattlePassPremiumOwned,
+                battlePassClaimedFree = data.BattlePassClaimedFree?.ToArray() ?? Array.Empty<int>(),
+                battlePassClaimedPremium = data.BattlePassClaimedPremium?.ToArray() ?? Array.Empty<int>(),
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
 
@@ -353,6 +366,12 @@ namespace NeonRush.Infrastructure.Save
                 MissionDay = Math.Max(0, missionDay),
                 Missions = FromMissionDtos(missions),
 
+                BattlePassSeasonId = battlePassSeasonId ?? string.Empty,
+                BattlePassXp = Math.Max(0, battlePassXp),
+                BattlePassPremiumOwned = battlePassPremiumOwned,
+                BattlePassClaimedFree = ToIntList(battlePassClaimedFree),
+                BattlePassClaimedPremium = ToIntList(battlePassClaimedPremium),
+
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save
                 // into a hard crash on boot.
@@ -363,6 +382,11 @@ namespace NeonRush.Infrastructure.Save
                 ticks > 0 && ticks <= DateTime.MaxValue.Ticks
                     ? new DateTime(ticks, DateTimeKind.Utc)
                     : DateTime.MinValue;
+
+            private static System.Collections.Generic.List<int> ToIntList(int[] values) =>
+                values != null
+                    ? new System.Collections.Generic.List<int>(values)
+                    : new System.Collections.Generic.List<int>();
 
             private static System.Collections.Generic.List<SaveData.MissionSave> FromMissionDtos(MissionDto[] dtos)
             {

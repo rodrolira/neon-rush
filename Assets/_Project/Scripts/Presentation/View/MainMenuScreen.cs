@@ -54,6 +54,9 @@ namespace NeonRush.Presentation.View
         /// <summary>Raised when the player opens the shop.</summary>
         public event Action ShopRequested;
 
+        /// <summary>Raised when the player opens the battle pass.</summary>
+        public event Action PassRequested;
+
         public MainMenuScreen(
             Wallet wallet,
             PlayerProfile profile,
@@ -179,27 +182,38 @@ namespace NeonRush.Presentation.View
 
         private void BuildFooter(Transform parent)
         {
-            var shop = new GameObject("Shop", typeof(RectTransform), typeof(Image), typeof(Button));
-            shop.transform.SetParent(parent, worldPositionStays: false);
+            // Two buttons side by side: SHOP (spend) and PASS (the season's rewards). Neither is the
+            // dominant affordance — that is the tap-anywhere backdrop — but both are one glance away.
+            BuildFooterButton(parent, "Shop", "SHOP", new Vector2(-210f, 70f),
+                new Color(0.55f, 0.35f, 0.85f), () => ShopRequested?.Invoke());
 
-            var rect = shop.GetComponent<RectTransform>();
+            BuildFooterButton(parent, "Pass", "PASS", new Vector2(210f, 70f),
+                new Color(0.16f, 0.6f, 0.45f), () => PassRequested?.Invoke());
+
+            var hint = Label(parent, "Hint", new Vector2(0.5f, 0f), new Vector2(0f, 200f), TextAnchor.LowerCenter, 30);
+            hint.text = "tap anywhere to run";
+            hint.color = new Color(0.55f, 0.65f, 0.8f);
+        }
+
+        private void BuildFooterButton(Transform parent, string name, string caption, Vector2 position, Color colour, Action onClick)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, worldPositionStays: false);
+
+            var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0f);
             rect.anchorMax = new Vector2(0.5f, 0f);
             rect.pivot = new Vector2(0.5f, 0f);
-            rect.sizeDelta = new Vector2(400f, 110f);
-            rect.anchoredPosition = new Vector2(0f, 70f);
+            rect.sizeDelta = new Vector2(380f, 110f);
+            rect.anchoredPosition = position;
 
-            shop.GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.85f);
-            shop.GetComponent<Button>().onClick.AddListener(() => ShopRequested?.Invoke());
+            go.GetComponent<Image>().color = colour;
+            go.GetComponent<Button>().onClick.AddListener(() => onClick());
 
-            var label = Label(shop.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 38);
-            label.text = "SHOP";
+            var label = Label(go.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 38);
+            label.text = caption;
             label.color = Color.white;
             Stretch(label.rectTransform);
-
-            var hint = Label(parent, "Hint", new Vector2(0.5f, 0f), new Vector2(0f, 210f), TextAnchor.LowerCenter, 30);
-            hint.text = "tap anywhere to run";
-            hint.color = new Color(0.55f, 0.65f, 0.8f);
         }
 
         // -------------------------------------------------------------------------------

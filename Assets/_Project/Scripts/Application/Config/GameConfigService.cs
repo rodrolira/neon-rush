@@ -1,4 +1,5 @@
 using System;
+using NeonRush.Application.BattlePass;
 using NeonRush.Domain.Ads;
 using NeonRush.Domain.Ports;
 using NeonRush.Domain.Run;
@@ -112,6 +113,38 @@ namespace NeonRush.Application.Config
                 // other number toward "show ads constantly". Its own clamp ceiling keeps even a
                 // maxed-out config from becoming an ad every run.
                 MaxInterstitialsPerSession = ClampInt(_remote.GetInt(RemoteConfigKeys.AdMaxPerSession, d.MaxInterstitialsPerSession), 0, 20),
+            };
+
+            try
+            {
+                config.Validate();
+                return config;
+            }
+            catch (ArgumentException)
+            {
+                return d;
+            }
+        }
+
+        // -------------------------------------------------------------------------------
+        // Battle pass
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Builds the battle-pass pacing config from remote values over the compiled defaults, every
+        /// scalar clamped to a sane band. Season pacing is the lever LiveOps reaches for most, and the
+        /// clamps are what stop a fat-fingered push from making the pass either instantly complete
+        /// (XP wildly high) or literally uncompletable (XP zero).
+        /// </summary>
+        public BattlePassConfig BuildBattlePassConfig()
+        {
+            var d = new BattlePassConfig();
+
+            var config = new BattlePassConfig
+            {
+                XpPerMetre = Clamp(_remote.GetFloat(RemoteConfigKeys.BattlePassXpPerMetre, d.XpPerMetre), 0f, 100f),
+                XpPerCoin = ClampInt(_remote.GetInt(RemoteConfigKeys.BattlePassXpPerCoin, d.XpPerCoin), 0, 1_000),
+                PremiumGemPrice = ClampInt(_remote.GetInt(RemoteConfigKeys.BattlePassPremiumGemPrice, d.PremiumGemPrice), 0, 100_000),
             };
 
             try
