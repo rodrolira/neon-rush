@@ -137,6 +137,76 @@ namespace NeonRush.Tests.EditMode
                 "The number of live chunks must stay constant no matter how long the run lasts.");
         }
 
+        [Test]
+        public void TheTrackSpawnsObstaclesOfEveryHeight_NotJustOneWall()
+        {
+            // The regression guard for "the jump does nothing": the streamer used to spawn a single
+            // 1.6 m wall everywhere. It must now put low blocks, hanging barriers, and full walls on
+            // the track — proven by seeing all three archetype heights come through as chunks recycle.
+            _track.Reset();
+
+            var lowHeight = ObstacleArchetype.For(ObstacleKind.LowJump).Height;
+            var slideHeight = ObstacleArchetype.For(ObstacleKind.HighSlide).Height;
+            var blockHeight = ObstacleArchetype.For(ObstacleKind.FullBlock).Height;
+
+            var seenLow = false;
+            var seenSlide = false;
+            var seenBlock = false;
+
+            for (var frame = 0; frame < 6000; frame++)
+            {
+                _track.Tick(1f / 60f, _tuning.MaxSpeed);
+
+                foreach (var chunk in _track.ActiveChunks)
+                {
+                    foreach (var obstacle in chunk.Obstacles)
+                    {
+                        if (obstacle == null) continue;
+
+                        var h = obstacle.transform.localScale.y;
+                        if (Mathf.Abs(h - lowHeight) < 0.01f) seenLow = true;
+                        else if (Mathf.Abs(h - slideHeight) < 0.01f) seenSlide = true;
+                        else if (Mathf.Abs(h - blockHeight) < 0.01f) seenBlock = true;
+                    }
+                }
+
+                if (seenLow && seenSlide && seenBlock) break;
+            }
+
+            Assert.That(seenLow, Is.True, "No jump-over (low) obstacles ever spawned.");
+            Assert.That(seenSlide, Is.True, "No slide-under (hanging) obstacles ever spawned.");
+            Assert.That(seenBlock, Is.True, "No full-wall obstacles ever spawned.");
+        }
+
+        [Test]
+        public void HangingBarriersFloat_AndGroundedObstaclesSitOnTheFloor()
+        {
+            // A slide-under barrier that spawned on the ground would be un-slideable and kill the
+            // player unfairly. Assert that whatever is at slide height is actually raised off the
+            // floor, and full walls are not.
+            _track.Reset();
+
+            var slideHeight = ObstacleArchetype.For(ObstacleKind.HighSlide).Height;
+            var slideCentreY = ObstacleArchetype.For(ObstacleKind.HighSlide).CentreY;
+
+            for (var frame = 0; frame < 6000; frame++)
+            {
+                _track.Tick(1f / 60f, _tuning.MaxSpeed);
+
+                foreach (var chunk in _track.ActiveChunks)
+                {
+                    foreach (var obstacle in chunk.Obstacles)
+                    {
+                        if (obstacle == null) continue;
+                        if (Mathf.Abs(obstacle.transform.localScale.y - slideHeight) >= 0.01f) continue;
+
+                        Assert.That(obstacle.transform.localPosition.y, Is.EqualTo(slideCentreY).Within(0.01f),
+                            "A hanging barrier must float at its archetype centre so a slide can pass under it.");
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// The invariant: sorted by position, each chunk must start exactly where the previous one
         /// ended. Any deviation is a visible hole (or an overlap) in the road.

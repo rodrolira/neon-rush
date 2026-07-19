@@ -51,6 +51,12 @@ namespace NeonRush.Presentation.World
         private readonly NeonMaterials _materials;
         private readonly System.Random _random;
 
+        /// <summary>Plans each row's obstacle layout. Pure and tested — see <see cref="RowPlanner"/>.</summary>
+        private readonly RowPlanner _rowPlanner;
+
+        /// <summary>Reused per-row buffer so planning a row allocates nothing mid-run.</summary>
+        private readonly ObstacleKind?[] _rowBuffer = new ObstacleKind?[LaneCount];
+
         private readonly GameObjectPool _chunkPool;
         private readonly GameObjectPool _obstaclePool;
         private readonly GameObjectPool _coinPool;
@@ -79,6 +85,8 @@ namespace NeonRush.Presentation.World
             // also the foundation for server-side run validation later.
             _random = new System.Random(seed);
 
+            _rowPlanner = new RowPlanner(LaneCount);
+
             var roadMaterial = _materials.Get(NeonMaterials.Road, emission: 0.05f);
             var lineMaterial = _materials.Get(NeonMaterials.LaneLine, emission: 2.2f);
             var obstacleMaterial = _materials.Get(NeonMaterials.Obstacle);
@@ -92,8 +100,13 @@ namespace NeonRush.Presentation.World
             // Pre-warm generously. Every instance we fail to pre-warm here is an Instantiate during
             // a run, which is a GC spike, which is a dropped frame at the worst possible moment.
             // Memory is cheap; a stutter mid-run is not.
+            //
+            // One pool serves every obstacle kind: the cubes are created at unit size and re-scaled
+            // per rent to the archetype's dimensions (see PopulateChunk). A shared pool means a low
+            // block recycled behind the player can come back as a wall ahead of it, so the kind mix
+            // costs no extra memory.
             _obstaclePool = new GameObjectPool(
-                () => PrimitiveFactory.Cube("Obstacle", ObstacleSize, obstacleMaterial),
+                () => PrimitiveFactory.Cube("Obstacle", Vector3.one, obstacleMaterial),
                 _worldRoot,
                 prewarm: _tuning.ActiveChunks * RowsPerChunk * 2);
 
@@ -103,7 +116,6 @@ namespace NeonRush.Presentation.World
                 prewarm: _tuning.ActiveChunks * RowsPerChunk * LaneCount);
         }
 
-        private static readonly Vector3 ObstacleSize = new(1.8f, 1.6f, 1.2f);
         private const float CoinRadius = 0.35f;
 
         /// <summary>Height at which coins float, in metres. Reachable while running; never requires a jump.</summary>
@@ -304,11 +316,12 @@ namespace NeonRush.Presentation.World
         /// <summary>
         /// Fills a chunk with obstacles and coins.
         ///
-        /// The invariant that must never be violated: <b>at least one lane in every row is
-        /// passable.</b> If all three lanes are blocked, the player dies to a situation with no
-        /// legal solution — and a death the player could not have avoided is the fastest way to
-        /// make them uninstall. Difficulty here comes from *how many* lanes are blocked and how
-        /// little time there is to react, never from making a row unsurvivable.
+        /// The row layout — which lanes are blocked, by which kind of obstacle, and the guarantee
+        /// that one lane is always left empty — is decided by the pure, tested <see cref="RowPlanner"/>.
+        /// This method's only job is to turn that plan into pooled GameObjects at the right size and
+        /// height. Keeping the survivability logic out of here is deliberate: a rule that can kill the
+        /// player unfairly belongs in Domain where it is unit-tested, not tangled up with Instantiate
+        /// calls that need a running scene to exercise.
         /// </summary>
         private void PopulateChunk(Chunk chunk)
         {
@@ -324,39 +337,28 @@ namespace NeonRush.Presentation.World
                 var localZ = row * rowSpacing + rowSpacing * 0.5f;
                 var worldZ = chunk.Z + localZ;
 
-                // Grace period at the start of a run: coins only, no obstacles. Dying in the first
-                // two seconds of a fresh install reads as "this game is unfair", not "I made a
-                // mistake", and it is measurable in D1 retention.
+                // Grace period at the start of a run: coins only, no obstacles.
                 var safe = worldZ < _tuning.SafeStartDistance;
 
-                var blockedLanes = safe ? 0 : ChooseBlockedLaneCount(difficulty);
-
-                // Pick which lanes are blocked, guaranteeing at least one free lane.
-                var free = _random.Next(LaneCount); // the lane we promise to leave open
+                _rowPlanner.Plan(_rowBuffer, difficulty, safe, _random);
 
                 for (var laneIndex = 0; laneIndex < LaneCount; laneIndex++)
                 {
                     var lane = (Lane)(laneIndex - 1); // 0,1,2 -> -1,0,1
                     var x = lane.OffsetFor(_tuning.LaneWidth);
 
-                    var isBlocked = !safe
-                                    && laneIndex != free
-                                    && blockedLanes > 0
-                                    && ShouldBlock(laneIndex, free, blockedLanes);
+                    var kind = _rowBuffer[laneIndex];
 
-                    if (isBlocked)
+                    if (kind.HasValue)
                     {
-                        var obstacle = _obstaclePool.Rent();
-                        obstacle.transform.SetParent(chunk.Root.transform, worldPositionStays: false);
-                        obstacle.transform.localPosition = new Vector3(x, ObstacleSize.y * 0.5f, localZ);
-
-                        chunk.Obstacles.Add(obstacle);
+                        SpawnObstacle(chunk, kind.Value, x, localZ);
                     }
                     else
                     {
                         // Coins go where it is safe to run. That is not decoration — it is how the
                         // game teaches the correct line without a tutorial. The player learns to
-                        // follow the gold, and the gold is always survivable.
+                        // follow the gold, and the gold is always in a lane that is survivable by
+                        // simply staying in it.
                         if (_random.NextDouble() < 0.55)
                         {
                             var coin = _coinPool.Rent();
@@ -372,35 +374,21 @@ namespace NeonRush.Presentation.World
         }
 
         /// <summary>
-        /// How many lanes to block in a row, as difficulty rises. Never returns 3 — that is the
-        /// unsurvivable case, and it is excluded structurally rather than by a comment asking
-        /// future maintainers to be careful.
+        /// Rents a pooled cube and shapes it into the given obstacle kind: scaled to the archetype's
+        /// dimensions and raised to its centre height, so a hanging slide-under barrier floats and a
+        /// grounded block sits on the floor. The collision system reads the cube's localScale, so the
+        /// hitbox follows the size automatically — no per-kind collision code exists or is needed.
         /// </summary>
-        private int ChooseBlockedLaneCount(float difficulty)
+        private void SpawnObstacle(Chunk chunk, ObstacleKind kind, float x, float localZ)
         {
-            var roll = _random.NextDouble();
+            var archetype = ObstacleArchetype.For(kind);
 
-            // At difficulty 0: mostly empty rows. At difficulty 1: usually one or two lanes blocked.
-            var emptyChance = Mathf.Lerp(0.65f, 0.20f, difficulty);
-            var doubleChance = Mathf.Lerp(0.05f, 0.35f, difficulty);
+            var obstacle = _obstaclePool.Rent();
+            obstacle.transform.SetParent(chunk.Root.transform, worldPositionStays: false);
+            obstacle.transform.localScale = new Vector3(archetype.Width, archetype.Height, archetype.Depth);
+            obstacle.transform.localPosition = new Vector3(x, archetype.CentreY, localZ);
 
-            if (roll < emptyChance) return 0;
-            if (roll > 1.0 - doubleChance) return 2;
-
-            return 1;
-        }
-
-        /// <summary>Deterministically decides whether a given lane is one of the blocked ones.</summary>
-        private static bool ShouldBlock(int laneIndex, int freeLane, int blockedLanes)
-        {
-            if (laneIndex == freeLane) return false;
-
-            if (blockedLanes >= 2) return true; // both non-free lanes
-
-            // Exactly one blocked lane: pick the first non-free lane deterministically so the row
-            // is stable if it is ever regenerated from the same seed.
-            var firstNonFree = freeLane == 0 ? 1 : 0;
-            return laneIndex == firstNonFree;
+            chunk.Obstacles.Add(obstacle);
         }
 
         /// <summary>Builds the visual shell of a chunk: road, lane markers, and the flanking skyline.</summary>
