@@ -26,8 +26,8 @@ namespace NeonRush.Domain.Save
         /// </summary>
         public int Version { get; set; } = CurrentVersion;
 
-        /// <summary>The schema version this build writes. v2 added the battle-pass block.</summary>
-        public const int CurrentVersion = 2;
+        /// <summary>The schema version this build writes. v2 added the battle-pass block; v3 added the audio-muted flag.</summary>
+        public const int CurrentVersion = 3;
 
         public int Coins { get; set; }
 
@@ -95,6 +95,11 @@ namespace NeonRush.Domain.Save
         /// <summary>UTC instant of the last VIP daily-gem grant, so it pays at most once per UTC day across restarts.</summary>
         public DateTime SubscriptionLastDailyGrantUtc { get; set; }
 
+        // --- Settings (schema v3) ---
+
+        /// <summary>True when the player has muted the game. Persisted so a silenced game stays silent across launches.</summary>
+        public bool AudioMuted { get; set; }
+
         /// <summary>One mission's persisted state. Flat and dumb on purpose — it is a wire format.</summary>
         public sealed class MissionSave
         {
@@ -139,6 +144,7 @@ namespace NeonRush.Domain.Save
             StarterPackFirstSeenUtc = StarterPackFirstSeenUtc,
             SubscriptionExpiryUtc = SubscriptionExpiryUtc,
             SubscriptionLastDailyGrantUtc = SubscriptionLastDailyGrantUtc,
+            AudioMuted = AudioMuted,
         };
 
         private List<MissionSave> CloneMissions()
@@ -176,6 +182,7 @@ namespace NeonRush.Domain.Save
             StarterPackFirstSeenUtc = DateTime.MinValue,
             SubscriptionExpiryUtc = DateTime.MinValue,
             SubscriptionLastDailyGrantUtc = DateTime.MinValue,
+            AudioMuted = false,
         };
     }
 

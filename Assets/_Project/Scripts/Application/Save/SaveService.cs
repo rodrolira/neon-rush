@@ -72,6 +72,13 @@ namespace NeonRush.Application.Save
         /// <summary>Set once ad removal is bought. Persisted so it survives a reinstall.</summary>
         private bool _adsRemoved;
 
+        /// <summary>
+        /// The player's mute setting. A plain persisted flag, set by the composition root when the
+        /// mute toggle flips (which also marks the save dirty). Mirrors <see cref="_adsRemoved"/>: a
+        /// value the save owns rather than reading off another service.
+        /// </summary>
+        public bool AudioMuted { get; set; }
+
         public SaveService(
             ISaveStore store,
             Wallet wallet,
@@ -179,6 +186,7 @@ namespace NeonRush.Application.Save
 
             data.OwnedItems = new List<string>(_inventory.Owned);
             data.AdsRemoved = _adsRemoved;
+            data.AudioMuted = AudioMuted;
 
             if (DailyRewards != null)
             {

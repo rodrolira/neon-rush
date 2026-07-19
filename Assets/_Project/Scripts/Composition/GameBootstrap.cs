@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NeonRush.Application.Ads;
+using NeonRush.Application.Audio;
 using NeonRush.Application.BattlePass;
 using NeonRush.Application.Subscription;
 using NeonRush.Application.Analytics;
@@ -28,6 +29,7 @@ using NeonRush.Infrastructure.Iap;
 using NeonRush.Infrastructure.Remote;
 using NeonRush.Infrastructure.Save;
 using NeonRush.Infrastructure.Time;
+using NeonRush.Presentation.Audio;
 using NeonRush.Presentation.Input;
 using NeonRush.Presentation.Player;
 using NeonRush.Presentation.View;
@@ -102,6 +104,8 @@ namespace NeonRush.Composition
 
         private PowerUpService _powerUps;
         private PowerUpConfig _powerUpConfig;
+        private NeonAudioService _audio;
+        private AudioReporter _audioReporter;
 
         private SwipeInput _input;
         private PlayerMotor _player;
@@ -373,6 +377,13 @@ namespace NeonRush.Composition
 
             BuildScene();
 
+            // Restore the persisted mute setting: apply it to the live audio, mirror it into the save
+            // service (which owns the persisted flag), and set the menu toggle to match. Done here, not
+            // in BuildScene, because the loaded save is in scope in Awake.
+            _audio.SetMuted(loaded.Data.AudioMuted);
+            _save.AudioMuted = loaded.Data.AudioMuted;
+            _menu.SetMuteState(loaded.Data.AudioMuted);
+
             // Kick the async fetch AFTER the game is fully built and playable on defaults. When it
             // completes, the new values are live for the next objects that read them (the next run's
             // tuning, the next store open). We never rebuild the live run underneath the player.
@@ -397,6 +408,16 @@ namespace NeonRush.Composition
         private void BuildScene()
         {
             _materials = new NeonMaterials();
+
+            // --- Audio ----------------------------------------------------------------------
+            //
+            // Procedural, like the greybox visuals: every sound is synthesised from code at
+            // construction, so the game ships a full palette with zero audio asset files. The reporter
+            // maps the events the game already publishes to sounds, so no gameplay system ever calls
+            // the audio engine directly. Built early so it is listening before the first run.
+            _audio = new NeonAudioService(transform);
+            _container.RegisterInstance<IAudioService>(_audio);
+            _audioReporter = new AudioReporter(_audio, _bus);
 
             var world = new GameObject("World").transform;
             world.SetParent(transform, worldPositionStays: false);
@@ -511,6 +532,7 @@ namespace NeonRush.Composition
             _menu.ShopRequested += () => _storeScreen.Show();
             _menu.PassRequested += () => _battlePassScreen.Show();
             _menu.VipRequested += () => _vipScreen.Show();
+            _menu.MuteChanged += OnMuteChanged;
 
             // The SHOP button lives on the death screen (the natural spend moment); tapping it opens
             // the store overlay. The store closes itself via its own CLOSE button. MENU returns to
@@ -519,6 +541,16 @@ namespace NeonRush.Composition
             _hud.MenuRequested += OnMenuRequested;
 
             _input = new SwipeInput();
+        }
+
+        private void OnMuteChanged(bool muted)
+        {
+            _audio.SetMuted(muted);
+
+            // The save service owns the persisted flag; mark dirty so the debounce writes it. A
+            // setting change is low-stakes enough not to warrant an immediate flush.
+            _save.AudioMuted = muted;
+            _save.MarkDirty();
         }
 
         private void OnMenuStartRequested()
@@ -979,6 +1011,7 @@ namespace NeonRush.Composition
 
             _adDirector?.Dispose();
             _analyticsReporter?.Dispose();
+            _audioReporter?.Dispose();
             _powerUps?.Dispose();
             _missions?.Dispose();
             _battlePass?.Dispose();
@@ -993,6 +1026,7 @@ namespace NeonRush.Composition
             _hud?.Dispose();
             _juice?.Dispose();
             _track?.Dispose();
+            _audio?.Dispose();
             _materials?.Dispose();
             _container?.Dispose();
             _bus?.Dispose();

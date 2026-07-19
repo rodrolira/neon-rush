@@ -60,6 +60,12 @@ namespace NeonRush.Presentation.View
         /// <summary>Raised when the player opens the VIP subscription screen.</summary>
         public event Action VipRequested;
 
+        /// <summary>Raised when the player toggles sound, carrying the new muted state. The composition root applies and persists it.</summary>
+        public event Action<bool> MuteChanged;
+
+        private Text _muteLabel;
+        private bool _muted;
+
         public MainMenuScreen(
             Wallet wallet,
             PlayerProfile profile,
@@ -128,6 +134,54 @@ namespace NeonRush.Presentation.View
             BuildMissionsPanel(canvasGo.transform);
             BuildDailyPanel(canvasGo.transform);
             BuildFooter(canvasGo.transform);
+            BuildMuteToggle(canvasGo.transform);
+        }
+
+        /// <summary>
+        /// A small sound on/off toggle in the top corner. It swallows its own tap (it is a Button over
+        /// an Image), so flipping sound never also starts a run. The menu owns the visual state; the
+        /// composition root owns applying and persisting it, via <see cref="MuteChanged"/>.
+        /// </summary>
+        private void BuildMuteToggle(Transform parent)
+        {
+            var go = new GameObject("MuteToggle", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, worldPositionStays: false);
+
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.sizeDelta = new Vector2(230f, 72f);
+            rect.anchoredPosition = new Vector2(40f, -150f);
+
+            go.GetComponent<Image>().color = new Color(0.12f, 0.14f, 0.22f, 0.96f);
+            go.GetComponent<Button>().onClick.AddListener(OnMuteTapped);
+
+            _muteLabel = Label(go.transform, "Label", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 30);
+            _muteLabel.color = Color.white;
+            Stretch(_muteLabel.rectTransform);
+
+            UpdateMuteLabel();
+        }
+
+        /// <summary>Sets the initial toggle state (restored from the save) without raising the change event.</summary>
+        public void SetMuteState(bool muted)
+        {
+            _muted = muted;
+            UpdateMuteLabel();
+        }
+
+        private void OnMuteTapped()
+        {
+            _muted = !_muted;
+            UpdateMuteLabel();
+            MuteChanged?.Invoke(_muted);
+        }
+
+        private void UpdateMuteLabel()
+        {
+            if (_muteLabel == null) return;
+            _muteLabel.text = _muted ? "SOUND: OFF" : "SOUND: ON";
         }
 
         private void BuildHeader(Transform parent)

@@ -300,6 +300,10 @@ namespace NeonRush.Infrastructure.Save
             public long subscriptionExpiryUtcTicks;
             public long subscriptionLastDailyGrantUtcTicks;
 
+            // Settings (schema v3). Absent in an older save; JsonUtility leaves it false, which is the
+            // correct default — a returning player is not silenced by an upgrade.
+            public bool audioMuted;
+
             [Serializable]
             public sealed class MissionDto
             {
@@ -333,6 +337,7 @@ namespace NeonRush.Infrastructure.Save
                 starterPackFirstSeenUtcTicks = data.StarterPackFirstSeenUtc.Ticks,
                 subscriptionExpiryUtcTicks = data.SubscriptionExpiryUtc.Ticks,
                 subscriptionLastDailyGrantUtcTicks = data.SubscriptionLastDailyGrantUtc.Ticks,
+                audioMuted = data.AudioMuted,
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
 
@@ -380,6 +385,7 @@ namespace NeonRush.Infrastructure.Save
                 StarterPackFirstSeenUtc = TicksToUtc(starterPackFirstSeenUtcTicks),
                 SubscriptionExpiryUtc = TicksToUtc(subscriptionExpiryUtcTicks),
                 SubscriptionLastDailyGrantUtc = TicksToUtc(subscriptionLastDailyGrantUtcTicks),
+                AudioMuted = audioMuted,
 
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save
