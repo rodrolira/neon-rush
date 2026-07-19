@@ -7,6 +7,7 @@ using NeonRush.Application.Analytics;
 using NeonRush.Application.Config;
 using NeonRush.Application.Economy;
 using NeonRush.Application.Events;
+using NeonRush.Application.PowerUps;
 using NeonRush.Application.Progression;
 using NeonRush.Application.Run;
 using NeonRush.Application.Save;
@@ -99,8 +100,12 @@ namespace NeonRush.Composition
         private StarterPackOfferScreen _starterPackScreen;
         private VipScreen _vipScreen;
 
+        private PowerUpService _powerUps;
+        private PowerUpConfig _powerUpConfig;
+
         private SwipeInput _input;
         private PlayerMotor _player;
+        private Transform _playerRoot;
         private TrackStreamer _track;
         private CollisionSystem _collisions;
         private RunCameraRig _camera;
@@ -356,6 +361,16 @@ namespace NeonRush.Composition
                 adPolicy.DisableInterstitials();
             });
 
+            // --- Power-ups ------------------------------------------------------------------
+            //
+            // In-run pickups: a coin magnet, a one-hit shield, a score multiplier. The service owns
+            // the effect timers and answers the collision system's "is there a shield to spend?".
+            // Purely a run-time system — nothing here persists, so there is no save wiring. The config
+            // is held so BuildScene can hand the track its spawn rate and the magnet its reach.
+            _powerUpConfig = _config.BuildPowerUpConfig();
+            _powerUps = new PowerUpService(_bus, _session, _powerUpConfig);
+            _container.RegisterInstance(_powerUps);
+
             BuildScene();
 
             // Kick the async fetch AFTER the game is fully built and playable on defaults. When it
@@ -406,12 +421,21 @@ namespace NeonRush.Composition
             playerGo.transform.localPosition = new Vector3(0f, playerHeight * 0.5f, 0f);
 
             _player = new PlayerMotor(playerPivot, _tuning, _bus, playerHeight);
+            _playerRoot = playerPivot;
 
             // --- Track ----------------------------------------------------------------------
             var seed = _seed != 0 ? _seed : Environment.TickCount;
             _track = new TrackStreamer(_tuning, world, _materials, seed);
 
-            _collisions = new CollisionSystem(_track, _player, _session, _tuning.ChunkLength);
+            // Turn on pickup spawning at the configured rate. Left off if a remote push disables
+            // power-ups, in which case the track spawns only obstacles and coins.
+            if (_powerUpConfig.Enabled)
+            {
+                _track.EnablePowerUps(_powerUpConfig.SpawnChancePerChunk);
+            }
+
+            // The collision system needs the power-up service so a shield can absorb a fatal hit.
+            _collisions = new CollisionSystem(_track, _player, _session, _tuning.ChunkLength, _powerUps);
 
             // --- Camera ---------------------------------------------------------------------
             var cameraGo = new GameObject("MainCamera", typeof(Camera));
@@ -468,7 +492,7 @@ namespace NeonRush.Composition
 
             EnsureEventSystem(uiRoot);
 
-            _hud = new RunHud(_session, _bus, uiRoot, _wallet, _adDirector);
+            _hud = new RunHud(_session, _bus, uiRoot, _wallet, _adDirector, _powerUps);
 
             // The screen-space juice layer (impact flash + speed lines). Built on UI graphics so it
             // ships no shader of its own — see RunJuice for why that matters on this project.
@@ -741,6 +765,17 @@ namespace NeonRush.Composition
         {
             _player.Tick(deltaTime, command);
             _session.Tick(deltaTime);
+
+            // Power-ups run down between the session tick and the world scroll: the score multiplier
+            // must already be current before this frame's score is computed (it is, above), and the
+            // magnet state must be set before the track moves the coins it is reeling in (below).
+            _powerUps.Tick(deltaTime);
+            _track.SetMagnet(
+                _powerUps.IsMagnetActive,
+                _playerRoot.localPosition.x,
+                _powerUpConfig.MagnetRadius,
+                _powerUpConfig.MagnetPullSpeed);
+
             _track.Tick(deltaTime, _session.Speed);
             _collisions.Tick();
             _camera.Tick(deltaTime, NormalisedSpeed);
@@ -944,6 +979,7 @@ namespace NeonRush.Composition
 
             _adDirector?.Dispose();
             _analyticsReporter?.Dispose();
+            _powerUps?.Dispose();
             _missions?.Dispose();
             _battlePass?.Dispose();
             _vip?.Dispose();

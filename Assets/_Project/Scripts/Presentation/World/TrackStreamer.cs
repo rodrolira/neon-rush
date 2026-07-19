@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NeonRush.Domain.PowerUps;
 using NeonRush.Domain.Run;
 using NeonRush.Presentation.Pooling;
 using NeonRush.Presentation.Visuals;
@@ -16,6 +17,13 @@ namespace NeonRush.Presentation.World
 
         /// <summary>Coins already banked this pass, so a coin cannot be collected twice.</summary>
         public readonly List<bool> CoinTaken = new();
+
+        /// <summary>Power-up pickups carried by this chunk, parallel with <see cref="PowerUpKinds"/> and <see cref="PowerUpTaken"/>.</summary>
+        public readonly List<GameObject> PowerUps = new();
+        public readonly List<PowerUpType> PowerUpKinds = new();
+
+        /// <summary>Pickups already grabbed this pass, so one cannot be collected twice.</summary>
+        public readonly List<bool> PowerUpTaken = new();
 
         public float Z;
     }
@@ -60,6 +68,23 @@ namespace NeonRush.Presentation.World
         private readonly GameObjectPool _chunkPool;
         private readonly GameObjectPool _obstaclePool;
         private readonly GameObjectPool _coinPool;
+        private readonly GameObjectPool _powerUpPool;
+
+        /// <summary>One material per power-up kind, applied to a rented cube so the pickup reads by colour.</summary>
+        private readonly Dictionary<PowerUpType, Material> _powerUpMaterials = new();
+
+        // --- Power-up spawning and magnet state -------------------------------------------------
+        // Both are configured from outside (GameBootstrap) after construction, so the streamer's
+        // constructor stays free of the power-up config and the existing track tests keep passing
+        // with power-ups simply switched off.
+
+        /// <summary>Probability a chunk carries a pickup. 0 = power-ups disabled (the default).</summary>
+        private float _powerUpChancePerChunk;
+
+        private bool _magnetActive;
+        private float _magnetPlayerX;
+        private float _magnetRadius;
+        private float _magnetPullSpeed;
 
         private readonly List<Chunk> _active = new();
 
@@ -114,12 +139,29 @@ namespace NeonRush.Presentation.World
                 () => PrimitiveFactory.Coin("Coin", CoinRadius, coinMaterial),
                 _worldRoot,
                 prewarm: _tuning.ActiveChunks * RowsPerChunk * LaneCount);
+
+            // One material per kind, built once. A pickup is a rented cube recoloured on rent.
+            _powerUpMaterials[PowerUpType.Magnet] = _materials.Get(new Color(0.20f, 1.00f, 0.85f), emission: 2.2f); // cyan
+            _powerUpMaterials[PowerUpType.Shield] = _materials.Get(new Color(0.35f, 0.60f, 1.00f), emission: 2.2f); // blue
+            _powerUpMaterials[PowerUpType.DoubleScore] = _materials.Get(new Color(1.00f, 0.82f, 0.25f), emission: 2.2f); // gold
+
+            // At most one pickup per chunk, so a couple of pooled instances cover every live chunk.
+            _powerUpPool = new GameObjectPool(
+                () => PrimitiveFactory.Cube("PowerUp", Vector3.one * PowerUpSize, _powerUpMaterials[PowerUpType.Magnet]),
+                _worldRoot,
+                prewarm: _tuning.ActiveChunks + 2);
         }
 
         private const float CoinRadius = 0.35f;
 
+        /// <summary>Edge length of a power-up pickup cube, in metres.</summary>
+        private const float PowerUpSize = 0.7f;
+
         /// <summary>Height at which coins float, in metres. Reachable while running; never requires a jump.</summary>
         private const float CoinHeight = 0.9f;
+
+        /// <summary>Height at which pickups float. Reachable on the ground; grabbing one never needs a jump.</summary>
+        private const float PowerUpHeight = 1.0f;
 
         /// <summary>True once the pools have been forced to grow mid-run — a pre-warm bug worth surfacing.</summary>
         public bool PoolsGrewUnderLoad =>
@@ -139,6 +181,7 @@ namespace NeonRush.Presentation.World
             _active.Clear();
             _distance = 0f;
             _nextChunkZ = 0f;
+            _magnetActive = false;
 
             for (var i = 0; i < _tuning.ActiveChunks; i++)
             {
@@ -183,6 +226,7 @@ namespace NeonRush.Presentation.World
             }
 
             SpinCoins(deltaTime);
+            AttractCoins(deltaTime);
         }
 
         /// <summary>Degrees per second a coin rotates about the vertical axis.</summary>
@@ -215,7 +259,8 @@ namespace NeonRush.Presentation.World
 
             for (var c = 0; c < _active.Count; c++)
             {
-                var coins = _active[c].Coins;
+                var chunk = _active[c];
+                var coins = chunk.Coins;
 
                 for (var i = 0; i < coins.Count; i++)
                 {
@@ -227,6 +272,57 @@ namespace NeonRush.Presentation.World
                     var position = coin.transform.localPosition;
                     position.y = CoinHeight + Mathf.Sin(_time * 3f + position.x * 1.7f + position.z * 0.3f) * CoinBobAmplitude;
                     coin.transform.localPosition = position;
+                }
+
+                // Pickups get the same tumble so they read as collectable, at a distinct rate so a
+                // pickup never looks like just a big coin.
+                var pickups = chunk.PowerUps;
+                for (var i = 0; i < pickups.Count; i++)
+                {
+                    var pickup = pickups[i];
+                    if (pickup == null) continue;
+
+                    pickup.transform.Rotate(new Vector3(0.4f, 1f, 0.2f), degrees * 0.6f, Space.Self);
+                }
+            }
+        }
+
+        /// <summary>
+        /// While the magnet is active, reels every coin inside its radius toward the player. Collection
+        /// itself still happens in the collision system when the coin reaches the player's box — the
+        /// magnet only shortens the distance, it does not bank the coin, so there is one authority on
+        /// what counts as "collected".
+        ///
+        /// Runs after <see cref="SpinCoins"/>, which sets each coin's bob height; pulling toward the
+        /// player afterwards simply overrides that for the coins being reeled in, which is what we want.
+        /// </summary>
+        private void AttractCoins(float deltaTime)
+        {
+            if (!_magnetActive) return;
+
+            var step = _magnetPullSpeed * deltaTime;
+            var radiusSq = _magnetRadius * _magnetRadius;
+
+            // The player stands at world z = 0; the pull target is their lane at coin height.
+            var target = new Vector3(_magnetPlayerX, CoinHeight, 0f);
+
+            for (var c = 0; c < _active.Count; c++)
+            {
+                var chunk = _active[c];
+                var coins = chunk.Coins;
+
+                for (var i = 0; i < coins.Count; i++)
+                {
+                    var coin = coins[i];
+                    if (coin == null) continue;
+
+                    // World position, since the target is world-space and chunks are offset in Z.
+                    var world = coin.transform.position;
+                    var toTarget = target - world;
+
+                    if (toTarget.sqrMagnitude > radiusSq) continue;
+
+                    coin.transform.position = Vector3.MoveTowards(world, target, step);
                 }
             }
         }
@@ -277,6 +373,42 @@ namespace NeonRush.Presentation.World
             }
         }
 
+        /// <summary>Marks a pickup as taken and returns it to the pool.</summary>
+        internal void TakePowerUp(Chunk chunk, int index)
+        {
+            chunk.PowerUpTaken[index] = true;
+
+            var pickup = chunk.PowerUps[index];
+            if (pickup != null)
+            {
+                _powerUpPool.Return(pickup);
+                chunk.PowerUps[index] = null;
+            }
+        }
+
+        /// <summary>
+        /// Turns power-up spawning on and sets how often a chunk carries one. Called once by the
+        /// composition root after reading the config; left off (chance 0) if power-ups are disabled,
+        /// which is also the default, so any test that does not opt in sees a track with no pickups.
+        /// </summary>
+        public void EnablePowerUps(float chancePerChunk)
+        {
+            _powerUpChancePerChunk = Mathf.Clamp01(chancePerChunk);
+        }
+
+        /// <summary>
+        /// Feeds the magnet its state for the coming frame: whether it is active and where the player
+        /// is, so <see cref="Tick"/> can reel coins in. Called every frame before <see cref="Tick"/>.
+        /// Passing <paramref name="active"/> false (the default state) leaves coins untouched.
+        /// </summary>
+        public void SetMagnet(bool active, float playerX, float radius, float pullSpeed)
+        {
+            _magnetActive = active;
+            _magnetPlayerX = playerX;
+            _magnetRadius = radius;
+            _magnetPullSpeed = pullSpeed;
+        }
+
         private void Emit()
         {
             var chunk = _chunkShells.Count > 0 ? _chunkShells.Pop() : new Chunk();
@@ -303,9 +435,17 @@ namespace NeonRush.Presentation.World
                 if (chunk.Coins[i] != null) _coinPool.Return(chunk.Coins[i]);
             }
 
+            for (var i = 0; i < chunk.PowerUps.Count; i++)
+            {
+                if (chunk.PowerUps[i] != null) _powerUpPool.Return(chunk.PowerUps[i]);
+            }
+
             chunk.Obstacles.Clear();
             chunk.Coins.Clear();
             chunk.CoinTaken.Clear();
+            chunk.PowerUps.Clear();
+            chunk.PowerUpKinds.Clear();
+            chunk.PowerUpTaken.Clear();
 
             _chunkPool.Return(chunk.Root);
             chunk.Root = null;
@@ -332,6 +472,11 @@ namespace NeonRush.Presentation.World
 
             var rowSpacing = _tuning.ChunkLength / RowsPerChunk;
 
+            // Decide up front whether this chunk carries a pickup, and in which row. The lane is
+            // chosen per-row from whatever ends up empty, so a pickup never lands inside an obstacle.
+            var spawnPickup = _powerUpChancePerChunk > 0f && _random.NextDouble() < _powerUpChancePerChunk;
+            var pickupRow = spawnPickup ? _random.Next(RowsPerChunk) : -1;
+
             for (var row = 0; row < RowsPerChunk; row++)
             {
                 var localZ = row * rowSpacing + rowSpacing * 0.5f;
@@ -341,6 +486,8 @@ namespace NeonRush.Presentation.World
                 var safe = worldZ < _tuning.SafeStartDistance;
 
                 _rowPlanner.Plan(_rowBuffer, difficulty, safe, _random);
+
+                var pickupLane = row == pickupRow ? PickEmptyLane(_rowBuffer) : -1;
 
                 for (var laneIndex = 0; laneIndex < LaneCount; laneIndex++)
                 {
@@ -352,6 +499,10 @@ namespace NeonRush.Presentation.World
                     if (kind.HasValue)
                     {
                         SpawnObstacle(chunk, kind.Value, x, localZ);
+                    }
+                    else if (laneIndex == pickupLane)
+                    {
+                        SpawnPowerUp(chunk, ChoosePowerUpKind(), x, localZ);
                     }
                     else
                     {
@@ -371,6 +522,50 @@ namespace NeonRush.Presentation.World
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Picks a random empty lane from a planned row, or -1 if the row is somehow full (it never is
+        /// — the planner guarantees an empty lane — but the caller handles -1 rather than assuming).
+        /// </summary>
+        private int PickEmptyLane(ObstacleKind?[] row)
+        {
+            // Reservoir pick so every empty lane is equally likely without allocating a list.
+            var chosen = -1;
+            var seen = 0;
+
+            for (var i = 0; i < row.Length; i++)
+            {
+                if (row[i].HasValue) continue;
+
+                seen++;
+                if (_random.Next(seen) == 0) chosen = i;
+            }
+
+            return chosen;
+        }
+
+        /// <summary>Weighted pick of a pickup kind. The shield is the rarest because it is the strongest.</summary>
+        private PowerUpType ChoosePowerUpKind()
+        {
+            var roll = _random.NextDouble();
+
+            if (roll < 0.45) return PowerUpType.Magnet;
+            if (roll < 0.80) return PowerUpType.DoubleScore;
+            return PowerUpType.Shield;
+        }
+
+        private void SpawnPowerUp(Chunk chunk, PowerUpType kind, float x, float localZ)
+        {
+            var pickup = _powerUpPool.Rent();
+            pickup.transform.SetParent(chunk.Root.transform, worldPositionStays: false);
+            pickup.transform.localScale = Vector3.one * PowerUpSize;
+            pickup.transform.localPosition = new Vector3(x, PowerUpHeight, localZ);
+            pickup.GetComponent<MeshRenderer>().sharedMaterial = _powerUpMaterials[kind];
+
+            chunk.PowerUps.Add(pickup);
+            chunk.PowerUpKinds.Add(kind);
+            chunk.PowerUpTaken.Add(false);
         }
 
         /// <summary>
@@ -500,6 +695,7 @@ namespace NeonRush.Presentation.World
             _chunkPool.Dispose();
             _obstaclePool.Dispose();
             _coinPool.Dispose();
+            _powerUpPool.Dispose();
 
             _active.Clear();
             _chunkShells.Clear();

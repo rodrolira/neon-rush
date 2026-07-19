@@ -92,6 +92,16 @@ namespace NeonRush.Domain.Ports
         public const string VipDailyGems = "vip_daily_gems";
         public const string VipCoinMultiplier = "vip_coin_multiplier";
 
+        // --- Power-ups (in-run pickups: magnet, shield, double-score) ---
+        public const string PowerUpsEnabled = "powerup_enabled";
+        public const string PowerUpMagnetSeconds = "powerup_magnet_seconds";
+        public const string PowerUpDoubleScoreSeconds = "powerup_double_score_seconds";
+        public const string PowerUpScoreMultiplier = "powerup_score_multiplier";
+        public const string PowerUpShieldCharges = "powerup_shield_charges";
+        public const string PowerUpMagnetRadius = "powerup_magnet_radius";
+        public const string PowerUpMagnetPullSpeed = "powerup_magnet_pull_speed";
+        public const string PowerUpSpawnChancePerChunk = "powerup_spawn_chance_per_chunk";
+
         // --- Store prices (currency items only; real-money prices come from the platform store) ---
         // Convention: "price_" + itemId. Kept as a helper so a new item does not need a new constant.
         public static string PriceKeyFor(string itemId) => "price_" + itemId;

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using NeonRush.Application.Ads;
 using NeonRush.Application.Events;
+using NeonRush.Application.PowerUps;
 using NeonRush.Application.Run;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Economy;
@@ -35,6 +37,7 @@ namespace NeonRush.Presentation.View
         private Text _coins;
         private Text _distance;
         private Text _bank;
+        private Text _powerUpStatus;
         private GameObject _gameOverPanel;
         private Text _gameOverText;
 
@@ -42,13 +45,21 @@ namespace NeonRush.Presentation.View
         private int _lastScore = -1;
         private int _lastCoins = -1;
         private int _lastDistance = -1;
+        private string _lastPowerUpStatus = string.Empty;
 
         private AdDirector _ads;
 
-        public RunHud(RunSession session, IEventBus bus, Transform uiRoot, Wallet wallet, AdDirector ads)
+        /// <summary>Optional. When present, the HUD shows a live power-up status line.</summary>
+        private readonly PowerUpService _powerUps;
+
+        // Reused so building the status line each frame allocates nothing until the text changes.
+        private readonly StringBuilder _statusBuilder = new();
+
+        public RunHud(RunSession session, IEventBus bus, Transform uiRoot, Wallet wallet, AdDirector ads, PowerUpService powerUps = null)
         {
             _session = session;
             _ads = ads;
+            _powerUps = powerUps;
 
             Build(uiRoot);
 
@@ -107,6 +118,43 @@ namespace NeonRush.Presentation.View
                 _lastDistance = metres;
                 _distance.text = $"{metres:N0} m";
             }
+
+            TickPowerUpStatus();
+        }
+
+        /// <summary>
+        /// Redraws the active-power-up line, only when its text actually changes (the countdown ticks
+        /// in whole seconds, so it changes at most once a second, not every frame). Reads the service
+        /// directly rather than tracking events, because a countdown is inherently a poll.
+        /// </summary>
+        private void TickPowerUpStatus()
+        {
+            if (_powerUps == null) return;
+
+            _statusBuilder.Clear();
+
+            if (_powerUps.IsMagnetActive)
+            {
+                _statusBuilder.Append("MAGNET ").Append(Mathf.CeilToInt(_powerUps.MagnetRemaining)).Append("s");
+            }
+
+            if (_powerUps.ShieldCharges > 0)
+            {
+                if (_statusBuilder.Length > 0) _statusBuilder.Append("   ");
+                _statusBuilder.Append("SHIELD x").Append(_powerUps.ShieldCharges);
+            }
+
+            if (_powerUps.IsDoubleScoreActive)
+            {
+                if (_statusBuilder.Length > 0) _statusBuilder.Append("   ");
+                _statusBuilder.Append("SCORE x2 ").Append(Mathf.CeilToInt(_powerUps.DoubleScoreRemaining)).Append("s");
+            }
+
+            var status = _statusBuilder.ToString();
+            if (status == _lastPowerUpStatus) return;
+
+            _lastPowerUpStatus = status;
+            _powerUpStatus.text = status;
         }
 
         /// <summary>Eases the coin counter's scale back to rest after a pickup kick. Runs every frame, even between runs, so it always settles.</summary>
@@ -126,6 +174,10 @@ namespace NeonRush.Presentation.View
 
             // Force the next Tick to repaint: -1 can never equal a real value.
             _lastScore = _lastCoins = _lastDistance = -1;
+
+            // A fresh run starts with no power-ups; clear any line left over from the last run.
+            _lastPowerUpStatus = string.Empty;
+            _powerUpStatus.text = string.Empty;
         }
 
         private RunEnded _lastRun;
@@ -134,6 +186,10 @@ namespace NeonRush.Presentation.View
         {
             _lastRun = e;
             _gameOverPanel.SetActive(true);
+
+            // The power-up line is gameplay UI; it must not linger over the death screen.
+            _powerUpStatus.text = string.Empty;
+            _lastPowerUpStatus = string.Empty;
 
             RefreshGameOverOffers();
         }
@@ -201,6 +257,11 @@ namespace NeonRush.Presentation.View
             _coins = Label(canvasGo.transform, "Coins", new Vector2(0f, 1f), new Vector2(40f, -100f), TextAnchor.UpperLeft, 44);
             _distance = Label(canvasGo.transform, "Distance", new Vector2(1f, 1f), new Vector2(-40f, -40f), TextAnchor.UpperRight, 44);
             _bank = Label(canvasGo.transform, "Bank", new Vector2(1f, 1f), new Vector2(-40f, -100f), TextAnchor.UpperRight, 44);
+
+            // Active-power-up line, low and centred so it sits above the thumbs and reads at a glance
+            // without covering the track. Warm gold to stand apart from the cyan run counters.
+            _powerUpStatus = Label(canvasGo.transform, "PowerUpStatus", new Vector2(0.5f, 0f), new Vector2(0f, 150f), TextAnchor.LowerCenter, 40);
+            _powerUpStatus.color = new Color(1f, 0.92f, 0.45f);
 
             BuildGameOverPanel(canvasGo.transform);
         }

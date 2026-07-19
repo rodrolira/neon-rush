@@ -1,5 +1,6 @@
 using System;
 using NeonRush.Application.BattlePass;
+using NeonRush.Application.PowerUps;
 using NeonRush.Application.Subscription;
 using NeonRush.Domain.Ads;
 using NeonRush.Domain.Ports;
@@ -179,6 +180,43 @@ namespace NeonRush.Application.Config
                 DurationDays = ClampInt(_remote.GetInt(RemoteConfigKeys.VipDurationDays, d.DurationDays), 1, 366),
                 DailyGems = ClampInt(_remote.GetInt(RemoteConfigKeys.VipDailyGems, d.DailyGems), 0, 100_000),
                 CoinMultiplier = Clamp(_remote.GetFloat(RemoteConfigKeys.VipCoinMultiplier, d.CoinMultiplier), 1f, 100f),
+            };
+
+            try
+            {
+                config.Validate();
+                return config;
+            }
+            catch (ArgumentException)
+            {
+                return d;
+            }
+        }
+
+        // -------------------------------------------------------------------------------
+        // Power-ups
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Builds the power-up config from remote values over the compiled defaults, every scalar
+        /// clamped. Drop rate and effect duration are exactly the levers LiveOps reaches for — a
+        /// power-up too generous inflates scores and cheapens the shield sale; too stingy and players
+        /// never feel them — so the clamps keep a bad push inside a band where the game still works.
+        /// </summary>
+        public PowerUpConfig BuildPowerUpConfig()
+        {
+            var d = new PowerUpConfig();
+
+            var config = new PowerUpConfig
+            {
+                Enabled = _remote.GetBool(RemoteConfigKeys.PowerUpsEnabled, d.Enabled),
+                MagnetSeconds = Clamp(_remote.GetFloat(RemoteConfigKeys.PowerUpMagnetSeconds, d.MagnetSeconds), 1f, 60f),
+                DoubleScoreSeconds = Clamp(_remote.GetFloat(RemoteConfigKeys.PowerUpDoubleScoreSeconds, d.DoubleScoreSeconds), 1f, 60f),
+                ScoreMultiplier = Clamp(_remote.GetFloat(RemoteConfigKeys.PowerUpScoreMultiplier, d.ScoreMultiplier), 1f, 10f),
+                ShieldChargesPerPickup = ClampInt(_remote.GetInt(RemoteConfigKeys.PowerUpShieldCharges, d.ShieldChargesPerPickup), 1, 10),
+                MagnetRadius = Clamp(_remote.GetFloat(RemoteConfigKeys.PowerUpMagnetRadius, d.MagnetRadius), 1f, 30f),
+                MagnetPullSpeed = Clamp(_remote.GetFloat(RemoteConfigKeys.PowerUpMagnetPullSpeed, d.MagnetPullSpeed), 1f, 100f),
+                SpawnChancePerChunk = Clamp(_remote.GetFloat(RemoteConfigKeys.PowerUpSpawnChancePerChunk, d.SpawnChancePerChunk), 0f, 1f),
             };
 
             try

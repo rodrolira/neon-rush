@@ -1,4 +1,5 @@
 using NeonRush.Application.Events;
+using NeonRush.Application.PowerUps;
 using NeonRush.Application.Run;
 using NeonRush.Presentation.Player;
 using UnityEngine;
@@ -36,17 +37,34 @@ namespace NeonRush.Presentation.World
         /// </summary>
         private const float TestWindow = 3.0f;
 
+        /// <summary>
+        /// Metres of obstacles cleared around the player when a shield absorbs a hit. Without this the
+        /// player would be resurrected still inside the obstacle they just hit and die on the very next
+        /// frame — the same trap <see cref="TrackStreamer.ClearObstaclesNear"/> guards against on a
+        /// revive. Smaller than the revive window because a shield leaves the run flowing, not paused.
+        /// </summary>
+        private const float ShieldClearMetres = 2.5f;
+
         private readonly TrackStreamer _track;
         private readonly PlayerMotor _player;
         private readonly RunSession _session;
         private readonly float _chunkLength;
 
-        public CollisionSystem(TrackStreamer track, PlayerMotor player, RunSession session, float chunkLength)
+        /// <summary>Optional. When present, an obstacle hit is offered to the shield before it is fatal.</summary>
+        private readonly PowerUpService _powerUps;
+
+        public CollisionSystem(
+            TrackStreamer track,
+            PlayerMotor player,
+            RunSession session,
+            float chunkLength,
+            PowerUpService powerUps = null)
         {
             _track = track;
             _player = player;
             _session = session;
             _chunkLength = chunkLength;
+            _powerUps = powerUps;
         }
 
         /// <summary>
@@ -64,9 +82,19 @@ namespace NeonRush.Presentation.World
                 if (IsOutsideTestWindow(chunk)) continue;
 
                 CollectCoins(chunk, playerBounds);
+                CollectPowerUps(chunk, playerBounds);
 
                 if (HitObstacle(chunk, playerBounds))
                 {
+                    // A shield, if the player has one, turns a fatal hit into a survivable one: it is
+                    // spent, the obstacles around the player are cleared so they do not immediately
+                    // re-collide, and the run flows on. No shield, no reprieve.
+                    if (_powerUps != null && _powerUps.TryConsumeShield())
+                    {
+                        _track.ClearObstaclesNear(ShieldClearMetres);
+                        return;
+                    }
+
                     _session.End(DeathCause.HitObstacle);
                     return;
                 }
@@ -111,6 +139,32 @@ namespace NeonRush.Presentation.World
 
                 _track.TakeCoin(chunk, i);
                 _session.CollectCoin();
+            }
+        }
+
+        private void CollectPowerUps(Chunk chunk, Bounds playerBounds)
+        {
+            if (_powerUps == null) return;
+
+            for (var i = 0; i < chunk.PowerUps.Count; i++)
+            {
+                if (chunk.PowerUpTaken[i]) continue;
+
+                var pickup = chunk.PowerUps[i];
+                if (pickup == null) continue;
+
+                var position = pickup.transform.position;
+
+                if (Mathf.Abs(position.z) > TestWindow) continue;
+
+                // The same forgiving box as coins: a pickup that demanded pixel-perfect alignment
+                // would feel stingy, and a missed power-up stings more than a missed coin.
+                var pickupBounds = new Bounds(position, new Vector3(0.9f, 0.9f, 0.7f));
+
+                if (!pickupBounds.Intersects(playerBounds)) continue;
+
+                _powerUps.Collect(chunk.PowerUpKinds[i]);
+                _track.TakePowerUp(chunk, i);
             }
         }
 

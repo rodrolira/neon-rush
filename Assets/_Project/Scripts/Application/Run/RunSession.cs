@@ -79,6 +79,15 @@ namespace NeonRush.Application.Run
         /// </summary>
         private float _scoreAccumulator;
 
+        /// <summary>
+        /// Multiplier applied to the distance score stream. 1 normally; raised by the DoubleScore
+        /// power-up for the duration of its effect. Only the distance score is affected — coin
+        /// currency is never multiplied, or a score boost would quietly become a coin-printing exploit.
+        /// Owned by the power-up layer, which sets it back to 1 when the effect ends and on every run
+        /// start. Guarded at the point of use so a stray non-positive value can never freeze the score.
+        /// </summary>
+        public float ScoreMultiplier { get; set; } = 1f;
+
         /// <summary>Starts a new run and resets all per-run state.</summary>
         public void Begin()
         {
@@ -97,6 +106,7 @@ namespace NeonRush.Application.Run
             RevivesUsed = 0;
             _scoreAccumulator = 0f;
             _lastMilestone = 0;
+            ScoreMultiplier = 1f;
             IsRunning = true;
 
             _bus.Publish(new RunStarted(RunNumber));
@@ -152,7 +162,8 @@ namespace NeonRush.Application.Run
 
             Distance += Speed * deltaTime;
 
-            _scoreAccumulator += Speed * deltaTime * _tuning.ScorePerMetre;
+            var multiplier = ScoreMultiplier > 0f ? ScoreMultiplier : 1f;
+            _scoreAccumulator += Speed * deltaTime * _tuning.ScorePerMetre * multiplier;
             Score = (int)_scoreAccumulator + Coins * _tuning.ScorePerCoin;
 
             PublishMilestonesUpTo(Distance);
