@@ -37,9 +37,10 @@ namespace NeonRush.Application.PowerUps
         /// <summary>
         /// Probability that a given track chunk carries one pickup. Deliberately well below 1: a
         /// power-up is a treat, and a treat on every chunk stops being one — it also trivialises the
-        /// difficulty the rest of the game works to build.
+        /// difficulty the rest of the game works to build. Tuned down from 0.35 on a device playtest
+        /// where pickups felt too frequent; at 0.18 one lands roughly every ~160 m.
         /// </summary>
-        public float SpawnChancePerChunk { get; set; } = 0.35f;
+        public float SpawnChancePerChunk { get; set; } = 0.18f;
 
         /// <summary>Throws on values that would make a power-up meaningless or breaking.</summary>
         public void Validate()
