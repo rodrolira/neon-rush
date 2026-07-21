@@ -26,8 +26,8 @@ namespace NeonRush.Domain.Save
         /// </summary>
         public int Version { get; set; } = CurrentVersion;
 
-        /// <summary>The schema version this build writes. v2 added the battle-pass block; v3 added the audio-muted flag.</summary>
-        public const int CurrentVersion = 3;
+        /// <summary>The schema version this build writes. v2 added the battle-pass block; v3 added the audio-muted flag; v4 added the stage campaign.</summary>
+        public const int CurrentVersion = 4;
 
         public int Coins { get; set; }
 
@@ -100,6 +100,14 @@ namespace NeonRush.Domain.Save
         /// <summary>True when the player has muted the game. Persisted so a silenced game stays silent across launches.</summary>
         public bool AudioMuted { get; set; }
 
+        // --- Stage campaign (schema v4) ---
+
+        /// <summary>1-based number of the stage the player is working on. 0 or 1 both mean the first stage.</summary>
+        public int StageNumber { get; set; } = 1;
+
+        /// <summary>Per-objective progress of the current stage. Cumulative and permanent until the stage is cleared.</summary>
+        public List<int> StageProgress { get; set; } = new();
+
         /// <summary>One mission's persisted state. Flat and dumb on purpose — it is a wire format.</summary>
         public sealed class MissionSave
         {
@@ -145,6 +153,8 @@ namespace NeonRush.Domain.Save
             SubscriptionExpiryUtc = SubscriptionExpiryUtc,
             SubscriptionLastDailyGrantUtc = SubscriptionLastDailyGrantUtc,
             AudioMuted = AudioMuted,
+            StageNumber = StageNumber,
+            StageProgress = new List<int>(StageProgress),
         };
 
         private List<MissionSave> CloneMissions()
@@ -183,6 +193,8 @@ namespace NeonRush.Domain.Save
             SubscriptionExpiryUtc = DateTime.MinValue,
             SubscriptionLastDailyGrantUtc = DateTime.MinValue,
             AudioMuted = false,
+            StageNumber = 1,
+            StageProgress = new List<int>(),
         };
     }
 

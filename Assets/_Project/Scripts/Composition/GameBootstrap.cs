@@ -12,6 +12,7 @@ using NeonRush.Application.PowerUps;
 using NeonRush.Application.Progression;
 using NeonRush.Application.Run;
 using NeonRush.Application.Save;
+using NeonRush.Application.Stages;
 using NeonRush.Application.States;
 using NeonRush.Application.Store;
 using NeonRush.Core.DI;
@@ -97,6 +98,7 @@ namespace NeonRush.Composition
         private BattlePassService _battlePass;
         private StarterPackService _starterPack;
         private SubscriptionService _vip;
+        private StageService _stages;
         private MainMenuScreen _menu;
         private BattlePassScreen _battlePassScreen;
         private StarterPackOfferScreen _starterPackScreen;
@@ -376,6 +378,16 @@ namespace NeonRush.Composition
             _powerUps = new PowerUpService(_bus, _session, _powerUpConfig);
             _container.RegisterInstance(_powerUps);
 
+            // --- Stage campaign -------------------------------------------------------------
+            //
+            // A permanent ladder of numbered stages, each a set of objectives that advance from the
+            // same gameplay events the daily missions read. Progress is restored from the save (a
+            // stage number past the ladder's end simply means the campaign is already complete).
+            _stages = new StageService(_wallet, _bus);
+            _stages.Restore(loaded.Data.StageNumber, loaded.Data.StageProgress);
+            _container.RegisterInstance(_stages);
+            _save.Stages = _stages;
+
             BuildScene();
 
             // Restore the persisted mute setting: apply it to the live audio, mirror it into the save
@@ -531,7 +543,7 @@ namespace NeonRush.Composition
 
             _vipScreen = new VipScreen(_catalog, _store, ResolveIap(), _vip, _bus, uiRoot);
 
-            _menu = new MainMenuScreen(_wallet, _profile, _missions, _daily, _bus, uiRoot);
+            _menu = new MainMenuScreen(_wallet, _profile, _missions, _daily, _bus, uiRoot, _stages);
             _menu.StartRequested += OnMenuStartRequested;
             _menu.ShopRequested += () => _storeScreen.Show();
             _menu.PassRequested += () => _battlePassScreen.Show();
@@ -1020,6 +1032,7 @@ namespace NeonRush.Composition
             _missions?.Dispose();
             _battlePass?.Dispose();
             _vip?.Dispose();
+            _stages?.Dispose();
             _profile?.Dispose();
             _rewards?.Dispose();
             _menu?.Dispose();

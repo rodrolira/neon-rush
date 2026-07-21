@@ -64,6 +64,9 @@ namespace NeonRush.Application.Save
         /// <summary>Optional, same pattern. Its expiry and last daily-grant timestamps are persisted.</summary>
         public Subscription.SubscriptionService Vip { get; set; }
 
+        /// <summary>Optional, same pattern. Its current stage number and per-objective progress are persisted.</summary>
+        public Stages.StageService Stages { get; set; }
+
         private readonly List<IDisposable> _subscriptions = new();
 
         private bool _dirty;
@@ -121,6 +124,12 @@ namespace NeonRush.Application.Save
 
             // The VIP subscription is a paid, time-limited entitlement — flush its new expiry at once.
             _subscriptions.Add(bus.Subscribe<NeonRush.Domain.Subscription.SubscriptionActivated>(_ => Flush()));
+
+            // Stage progress advances constantly; a debounced write is enough. But clearing a stage
+            // pays a reward and moves the campaign forward — flush that at once so a kill right after
+            // can never lose it or, worse, let it be earned twice.
+            _subscriptions.Add(bus.Subscribe<NeonRush.Application.Stages.StageProgressed>(_ => MarkDirty()));
+            _subscriptions.Add(bus.Subscribe<NeonRush.Application.Stages.StageCompleted>(_ => Flush()));
         }
 
         /// <summary>The catalogue id of the ad-removal product.</summary>
@@ -229,6 +238,12 @@ namespace NeonRush.Application.Save
             {
                 data.SubscriptionExpiryUtc = Vip.ExpiryUtc;
                 data.SubscriptionLastDailyGrantUtc = Vip.LastDailyGrantUtc;
+            }
+
+            if (Stages != null)
+            {
+                data.StageNumber = Stages.CurrentStageNumber;
+                data.StageProgress = new List<int>(Stages.ProgressSnapshot());
             }
 
             _profile.WriteTo(data);

@@ -304,6 +304,11 @@ namespace NeonRush.Infrastructure.Save
             // correct default — a returning player is not silenced by an upgrade.
             public bool audioMuted;
 
+            // Stage campaign (schema v4). Absent in an older save; JsonUtility leaves stageNumber 0,
+            // which StageService treats as "the first stage" — a clean migration into stage one.
+            public int stageNumber;
+            public int[] stageProgress;
+
             [Serializable]
             public sealed class MissionDto
             {
@@ -338,6 +343,8 @@ namespace NeonRush.Infrastructure.Save
                 subscriptionExpiryUtcTicks = data.SubscriptionExpiryUtc.Ticks,
                 subscriptionLastDailyGrantUtcTicks = data.SubscriptionLastDailyGrantUtc.Ticks,
                 audioMuted = data.AudioMuted,
+                stageNumber = data.StageNumber,
+                stageProgress = data.StageProgress?.ToArray() ?? Array.Empty<int>(),
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
 
@@ -386,6 +393,8 @@ namespace NeonRush.Infrastructure.Save
                 SubscriptionExpiryUtc = TicksToUtc(subscriptionExpiryUtcTicks),
                 SubscriptionLastDailyGrantUtc = TicksToUtc(subscriptionLastDailyGrantUtcTicks),
                 AudioMuted = audioMuted,
+                StageNumber = stageNumber,
+                StageProgress = ToIntList(stageProgress),
 
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save
