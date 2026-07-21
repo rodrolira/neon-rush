@@ -70,7 +70,6 @@ namespace NeonRush.Presentation.World
 
         private readonly RunTuning _tuning;
         private readonly Transform _worldRoot;
-        private readonly NeonMaterials _materials;
         private readonly System.Random _random;
 
         /// <summary>Plans each row's obstacle layout. Pure and tested — see <see cref="RowPlanner"/>.</summary>
@@ -84,8 +83,11 @@ namespace NeonRush.Presentation.World
         private readonly GameObjectPool _coinPool;
         private readonly GameObjectPool _powerUpPool;
 
-        /// <summary>One material per power-up kind, applied to a rented cube so the pickup reads by colour.</summary>
-        private readonly Dictionary<PowerUpType, Material> _powerUpMaterials = new();
+        /// <summary>
+        /// Decides what everything looks like. The streamer knows what to spawn and where; it has
+        /// no opinion on whether that is a stretched cube or an authored mesh.
+        /// </summary>
+        private readonly IMeshProvider _meshes;
 
         // --- Power-up spawning and magnet state -------------------------------------------------
         // Both are configured from outside (GameBootstrap) after construction, so the streamer's
@@ -113,11 +115,25 @@ namespace NeonRush.Presentation.World
 
         private bool _disposed;
 
-        public TrackStreamer(RunTuning tuning, Transform worldRoot, NeonMaterials materials, int seed)
+        /// <param name="meshes">
+        /// What everything looks like. Optional: omitted, the streamer builds the greybox provider
+        /// itself, so every existing test and any code that predates authored art keeps working
+        /// with no change at the call site.
+        /// </param>
+        public TrackStreamer(
+            RunTuning tuning,
+            Transform worldRoot,
+            NeonMaterials materials,
+            int seed,
+            IMeshProvider meshes = null)
         {
             _tuning = tuning;
             _worldRoot = worldRoot;
-            _materials = materials;
+
+            // The materials are no longer held: everything that needed one now goes through the
+            // provider. The parameter stays so the default greybox provider can be built here, and
+            // so every existing call site keeps compiling unchanged.
+            _meshes = meshes ?? new PrimitiveMeshProvider(materials);
 
             // Seeded, so a run is reproducible from its seed. That is what makes "the player says
             // they died to an impossible spawn at 1,240 m" a bug we can actually replay, and it is
@@ -126,13 +142,8 @@ namespace NeonRush.Presentation.World
 
             _rowPlanner = new RowPlanner(LaneCount);
 
-            var roadMaterial = _materials.Get(NeonMaterials.Road, emission: 0.05f);
-            var lineMaterial = _materials.Get(NeonMaterials.LaneLine, emission: 2.2f);
-            var obstacleMaterial = _materials.Get(NeonMaterials.Obstacle);
-            var coinMaterial = _materials.Get(NeonMaterials.Coin, emission: 2.0f);
-
             _chunkPool = new GameObjectPool(
-                () => BuildChunkVisual(roadMaterial, lineMaterial),
+                BuildChunkVisual,
                 _worldRoot,
                 prewarm: _tuning.ActiveChunks + 2);
 
@@ -140,28 +151,23 @@ namespace NeonRush.Presentation.World
             // a run, which is a GC spike, which is a dropped frame at the worst possible moment.
             // Memory is cheap; a stutter mid-run is not.
             //
-            // One pool serves every obstacle kind: the cubes are created at unit size and re-scaled
-            // per rent to the archetype's dimensions (see PopulateChunk). A shared pool means a low
-            // block recycled behind the player can come back as a wall ahead of it, so the kind mix
-            // costs no extra memory.
+            // One pool serves every obstacle kind, and the provider decides how a single instance
+            // manages to be all three: the greybox stretches a unit cube, the catalog toggles which
+            // authored mesh is visible. A shared pool means a low block recycled behind the player
+            // can come back as a wall ahead of it, so the kind mix costs no extra memory.
             _obstaclePool = new GameObjectPool(
-                () => PrimitiveFactory.Cube("Obstacle", Vector3.one, obstacleMaterial),
+                _meshes.CreateObstacle,
                 _worldRoot,
                 prewarm: _tuning.ActiveChunks * RowsPerChunk * 2);
 
             _coinPool = new GameObjectPool(
-                () => PrimitiveFactory.Coin("Coin", CoinRadius, coinMaterial),
+                () => _meshes.CreateCoin(CoinRadius),
                 _worldRoot,
                 prewarm: _tuning.ActiveChunks * RowsPerChunk * LaneCount);
 
-            // One material per kind, built once. A pickup is a rented cube recoloured on rent.
-            _powerUpMaterials[PowerUpType.Magnet] = _materials.Get(new Color(0.20f, 1.00f, 0.85f), emission: 2.2f); // cyan
-            _powerUpMaterials[PowerUpType.Shield] = _materials.Get(new Color(0.35f, 0.60f, 1.00f), emission: 2.2f); // blue
-            _powerUpMaterials[PowerUpType.DoubleScore] = _materials.Get(new Color(1.00f, 0.82f, 0.25f), emission: 2.2f); // gold
-
             // At most one pickup per chunk, so a couple of pooled instances cover every live chunk.
             _powerUpPool = new GameObjectPool(
-                () => PrimitiveFactory.Cube("PowerUp", Vector3.one * PowerUpSize, _powerUpMaterials[PowerUpType.Magnet]),
+                () => _meshes.CreatePowerUp(PowerUpSize),
                 _worldRoot,
                 prewarm: _tuning.ActiveChunks + 2);
         }
@@ -580,9 +586,12 @@ namespace NeonRush.Presentation.World
         {
             var pickup = _powerUpPool.Rent();
             pickup.transform.SetParent(chunk.Root.transform, worldPositionStays: false);
-            pickup.transform.localScale = Vector3.one * PowerUpSize;
             pickup.transform.localPosition = new Vector3(x, PowerUpHeight, localZ);
-            pickup.GetComponent<MeshRenderer>().sharedMaterial = _powerUpMaterials[kind];
+
+            // Sizing happens once, at creation, not here. Re-applying a 0.7 scale on every rent was
+            // harmless for a unit cube but would shrink an authored mesh — which is already 0.7 m
+            // across — a second time on every single spawn.
+            _meshes.ApplyPowerUp(pickup, kind);
 
             chunk.PowerUps.Add(pickup);
             chunk.PowerUpKinds.Add(kind);
@@ -615,17 +624,13 @@ namespace NeonRush.Presentation.World
         }
 
         /// <summary>Builds the visual shell of a chunk: road, lane markers, and the flanking skyline.</summary>
-        private GameObject BuildChunkVisual(Material road, Material line)
+        private GameObject BuildChunkVisual()
         {
             var root = new GameObject("Chunk");
 
             var width = _tuning.LaneWidth * LaneCount + 1.2f;
 
-            var slab = PrimitiveFactory.Cube(
-                "Road",
-                new Vector3(width, 0.2f, _tuning.ChunkLength),
-                road,
-                root.transform);
+            var slab = _meshes.CreateRoadSlab(width, 0.2f, _tuning.ChunkLength, root.transform);
 
             // The slab is authored around its centre, but the chunk's origin is its near edge, so
             // push it half a chunk forward and drop it just below y=0 (the plane the player runs on).
@@ -635,11 +640,7 @@ namespace NeonRush.Presentation.World
             {
                 var x = (i == 0 ? -0.5f : 0.5f) * _tuning.LaneWidth;
 
-                var marker = PrimitiveFactory.Cube(
-                    "LaneLine",
-                    new Vector3(0.08f, 0.02f, _tuning.ChunkLength),
-                    line,
-                    root.transform);
+                var marker = _meshes.CreateLaneMarker(0.08f, 0.02f, _tuning.ChunkLength, root.transform);
 
                 marker.transform.localPosition = new Vector3(x, 0.005f, _tuning.ChunkLength * 0.5f);
             }
@@ -672,8 +673,6 @@ namespace NeonRush.Presentation.World
         /// </summary>
         private void BuildSkyline(Transform root)
         {
-            var bodyMaterial = _materials.Get(new Color(0.05f, 0.04f, 0.11f), emission: 0.0f);
-
             const int buildingsPerSide = 4;
             var edge = _tuning.LaneWidth * LaneCount * 0.5f + 1.2f;
             var spacing = _tuning.ChunkLength / buildingsPerSide;
@@ -692,25 +691,23 @@ namespace NeonRush.Presentation.World
                     var x = side * (edge + gap + buildingWidth * 0.5f);
                     var z = i * spacing + spacing * 0.5f;
 
-                    var body = PrimitiveFactory.Cube(
-                        "Tower",
-                        new Vector3(buildingWidth, height, depth),
-                        bodyMaterial,
-                        root);
-
-                    body.transform.localPosition = new Vector3(x, height * 0.5f, z);
-
                     // The neon roof trim: a thin, hot strip capping the tower. This is the detail
-                    // the bloom pass turns into the skyline's glow.
+                    // the bloom pass turns into the skyline's glow. The provider owns whether that
+                    // is a separate cube or already baked into an authored block's crown.
                     var trim = TrimColours[_random.Next(TrimColours.Length)];
 
-                    var strip = PrimitiveFactory.Cube(
-                        "Trim",
-                        new Vector3(buildingWidth + 0.15f, 0.15f, depth + 0.15f),
-                        _materials.Get(trim, emission: 2.4f),
-                        root);
+                    var building = _meshes.CreateBuilding(buildingWidth, height, depth, trim, root);
 
-                    strip.transform.localPosition = new Vector3(x, height + 0.08f, z);
+                    // A building's origin is its base, so it goes straight down on the ground with
+                    // no half-height maths — and, more usefully, the caller no longer has to know
+                    // how tall the thing it just asked for actually turned out to be.
+                    building.transform.localPosition = new Vector3(x, 0f, z);
+
+                    // Rotating in 90-degree steps is how the skyline gets variety from a small set
+                    // of authored blocks. It is free for the greybox cube and it is the only
+                    // permitted variation for authored art, where a non-uniform scale would stretch
+                    // the facade texture and break the crown's proportions.
+                    building.transform.localRotation = Quaternion.Euler(0f, 90f * _random.Next(4), 0f);
                 }
             }
         }

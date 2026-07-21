@@ -145,10 +145,11 @@ namespace NeonRush.Tests.EditMode
             // the track — proven by seeing all three archetype heights come through as chunks recycle.
             _track.Reset();
 
-            var lowHeight = ObstacleArchetype.For(ObstacleKind.LowJump).Height;
-            var slideHeight = ObstacleArchetype.For(ObstacleKind.HighSlide).Height;
-            var blockHeight = ObstacleArchetype.For(ObstacleKind.FullBlock).Height;
-
+            // Kinds are read from the chunk's own record, not inferred from the transform's scale.
+            // The old version measured localScale.y and matched it against each archetype's height,
+            // which silently stopped being a kind test the moment obstacles could be authored
+            // meshes at scale 1 — every obstacle would have measured 1.0 and matched nothing, and
+            // this regression guard would have gone permanently green while proving nothing.
             var seenLow = false;
             var seenSlide = false;
             var seenBlock = false;
@@ -159,14 +160,16 @@ namespace NeonRush.Tests.EditMode
 
                 foreach (var chunk in _track.ActiveChunks)
                 {
-                    foreach (var obstacle in chunk.Obstacles)
+                    for (var i = 0; i < chunk.Obstacles.Count; i++)
                     {
-                        if (obstacle == null) continue;
+                        if (chunk.Obstacles[i] == null) continue;
 
-                        var h = obstacle.transform.localScale.y;
-                        if (Mathf.Abs(h - lowHeight) < 0.01f) seenLow = true;
-                        else if (Mathf.Abs(h - slideHeight) < 0.01f) seenSlide = true;
-                        else if (Mathf.Abs(h - blockHeight) < 0.01f) seenBlock = true;
+                        switch (chunk.ObstacleKinds[i])
+                        {
+                            case ObstacleKind.LowJump: seenLow = true; break;
+                            case ObstacleKind.HighSlide: seenSlide = true; break;
+                            case ObstacleKind.FullBlock: seenBlock = true; break;
+                        }
                     }
                 }
 
@@ -186,22 +189,26 @@ namespace NeonRush.Tests.EditMode
             // floor, and full walls are not.
             _track.Reset();
 
-            var slideHeight = ObstacleArchetype.For(ObstacleKind.HighSlide).Height;
-            var slideCentreY = ObstacleArchetype.For(ObstacleKind.HighSlide).CentreY;
-
             for (var frame = 0; frame < 6000; frame++)
             {
                 _track.Tick(1f / 60f, _tuning.MaxSpeed);
 
                 foreach (var chunk in _track.ActiveChunks)
                 {
-                    foreach (var obstacle in chunk.Obstacles)
+                    for (var i = 0; i < chunk.Obstacles.Count; i++)
                     {
+                        var obstacle = chunk.Obstacles[i];
                         if (obstacle == null) continue;
-                        if (Mathf.Abs(obstacle.transform.localScale.y - slideHeight) >= 0.01f) continue;
 
-                        Assert.That(obstacle.transform.localPosition.y, Is.EqualTo(slideCentreY).Within(0.01f),
-                            "A hanging barrier must float at its archetype centre so a slide can pass under it.");
+                        var kind = chunk.ObstacleKinds[i];
+                        var expectedY = ObstacleArchetype.For(kind).CentreY;
+
+                        // Now asserted for every kind, not just the hanging one. The height each
+                        // archetype must sit at is the whole basis of "passable by exactly one
+                        // move", so a grounded block spawned at the wrong Y is as unfair as a
+                        // barrier that fails to float.
+                        Assert.That(obstacle.transform.localPosition.y, Is.EqualTo(expectedY).Within(0.01f),
+                            $"A {kind} obstacle must spawn at its archetype's centre height.");
                     }
                 }
             }

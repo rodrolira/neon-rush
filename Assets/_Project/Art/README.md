@@ -5,7 +5,7 @@ Todo generado proceduralmente; el código fuente está en `Source/` y es reprodu
 con `python3 build.py <destino>`.
 
 Este set sustituye al greybox que `PrimitiveFactory` y `NeonMaterials` construyen en
-runtime. **Ningún archivo de gameplay ha sido modificado** — son assets más una guía.
+runtime. La integración está implementada: ver "Cómo quedó integrado" más abajo.
 
 ---
 
@@ -247,53 +247,117 @@ Para cada `.glb`, en el inspector:
 - **Cast Shadows: off**, **Receive Shadows: off**, Light/Reflection probes off.
 - **Read/Write: off**.
 
-### 3. Sustituir la fábrica de primitivas
+O ejecuta **`Neon Rush/Setup/Apply Model Import Settings`**, que los aplica a todos los
+modelos de golpe. Merece la pena repetirlo tras cada reexportación: el importador vuelve
+a sus valores por defecto en cada fichero nuevo, y un solo modelo puede reintroducir
+colliders y sombras sin que nadie lo note hasta que baja el frame rate en el móvil.
 
-El camino de menor riesgo es un `IMeshProvider` detrás del cual `PrimitiveFactory`
-queda como fallback. Nada fuera de `NeonMaterials`/`PrimitiveFactory` sabe hoy qué
-aspecto tiene un obstáculo, así que el cambio queda contenido en `Presentation/Visuals`:
+### 3. Crear y rellenar el catálogo
 
-```csharp
-public interface IMeshProvider
-{
-    GameObject Obstacle(ObstacleKind kind);
-    GameObject Coin();
-    GameObject PowerUp(PowerUpType type);
-    GameObject Player(string characterId);
-}
-```
+**`Neon Rush/Setup/Create Model Catalog`** crea el asset en
+`Assets/_Project/Resources/NeonRush/ModelCatalog.asset`. La ruta importa: el bootstrap lo
+carga con `Resources.Load`, que si falla no da error — simplemente vuelve al greybox.
 
-Puntos de enganche concretos:
+Arrastra los modelos importados a sus campos. **Todos los campos son opcionales:** uno
+vacío mantiene el greybox para ese objeto y nada más cambia. Eso es lo que permite que el
+arte entre por partes sin que el juego esté roto en ningún momento.
 
-| Dónde | Qué hace hoy | Qué pasa a hacer |
+### 4. Ya está
+
+No hay paso 4. El código de integración está escrito y en el repositorio.
+
+---
+
+## Cómo quedó integrado
+
+### El seam
+
+`IMeshProvider` (`Presentation/Visuals`) es el único sitio que sabe qué aspecto tienen las
+cosas. Dos implementaciones:
+
+- **`PrimitiveMeshProvider`** — el greybox, idéntico al de antes. Es el fallback, no un
+  parche temporal: es lo que corre en un clon nuevo, en CI sin importar assets, o cuando
+  alguien quiere tunear el bucle sin esperar a que se reexporte un modelo.
+- **`CatalogMeshProvider`** — sirve el arte del `ModelCatalog`, y delega en el greybox
+  para lo que el catálogo no tenga.
+
+`GameBootstrap.ResolveMeshProvider` elige uno al arrancar y lo registra en el log.
+
+### El pooling sobrevive intacto
+
+La interfaz se parte en `Create*` / `Apply*` justo por esto. Un objeto del pool se reutiliza
+entre kinds: el mismo obstáculo es un bloque bajo en un chunk y un muro en el siguiente.
+
+- `Create*` puede asignar memoria libremente — solo corre en el prewarm.
+- `Apply*` no asigna nada — corre en cada rent, en plena partida, donde el proyecto
+  prohíbe cualquier pico de GC.
+
+Con un cubo estirado eso era trivial. Con tres mallas distintas no, así que una instancia
+del pool es un contenedor con las tres mallas como hijas y `ApplyObstacle` activa una.
+Cuesta tres MeshRenderers por instancia en vez de uno, dos siempre desactivados: unos
+cientos de bytes y cero trabajo de GPU. A cambio, un rent es un `SetActive` y no un
+`Instantiate`.
+
+### Lo que cambió en el gameplay, y por qué
+
+**El hitbox ya no sale del transform.** Esto es lo importante, y es la corrección de un
+error que había en la primera versión de este documento.
+
+`CollisionSystem.HitObstacle` dimensionaba el hitbox leyendo `transform.localScale`. Eso
+era correcto solo mientras todo obstáculo fuese un cubo unitario estirado. Una malla
+autorada viene a tamaño real y se importa con escala 1, así que ese código habría
+encogido **todos** los hitboxes a un cubo de 1 m: el jugador atravesaría los bordes
+visibles de un muro de 1,8 m y moriría contra aire en el centro de un bloque bajo.
+
+Nada habría petado. Ningún test se habría puesto en rojo. El juego simplemente habría
+empezado a mentir, y el único síntoma serían reseñas diciendo que las colisiones van mal.
+
+La solución no es tocar la escala, es quitarle ese trabajo:
+
+| | Antes | Ahora |
 |---|---|---|
-| `TrackStreamer` L134 | `PrimitiveFactory.Cube("Obstacle", …)` | Instancia el prefab por `ObstacleKind` |
-| `TrackStreamer` L139 | `PrimitiveFactory.Coin(…)` | Instancia `PU_Coin` |
-| `TrackStreamer` L150 | `PrimitiveFactory.Cube("PowerUp", …)` | Instancia por `PowerUpType` |
-| `TrackStreamer` L596 | Cubo de calzada | `TRK_RoadSlab_30m` |
-| `TrackStreamer` L610 | Cubos de marcador | `TRK_LaneMarker_30m` |
-| `TrackStreamer` L667 | Cubos de edificio | Los tres prefabs de `ENV_Building_*` |
-| `GameBootstrap` L441 | Cubo del jugador | `CHR_Runner_*` según el personaje equipado |
+| Tamaño del hitbox | `transform.localScale` | `ObstacleArchetype.For(kind)` |
+| De dónde sale el kind | se infería midiendo la escala | `Chunk.ObstacleKinds`, lista paralela |
+| Efecto de cambiar el arte | cambiaba el hitbox | ninguno |
 
-**Dos cosas que no se pueden romper:**
+`Chunk` ahora lleva `ObstacleKinds` en paralelo a `Obstacles`, el mismo patrón que ya
+usaba para `PowerUpKinds`. El arquetipo pasa a ser la única definición del tamaño de cada
+kind — que es donde ya se tuneaban las holguras de salto y deslizamiento — y arte y
+volumen de colisión no pueden desincronizarse porque solo hay uno.
 
-1. **El pooling.** `GameObjectPool` prellena instancias en el arranque y el proyecto
-   prohíbe `Instantiate` durante una partida. Los prefabs entran en el pool igual que
-   los primitivos; lo que cambia es la factoría, no el ciclo de vida.
+**Otros dos ajustes menores del mismo tipo:**
 
-2. **La escala de los obstáculos.** Hoy `TrackStreamer` L583 hace
-   `localScale = new Vector3(archetype.Width, archetype.Height, archetype.Depth)`
-   sobre un cubo unitario. Estos modelos **ya vienen a tamaño real**, así que esa línea
-   debe pasar a `Vector3.one`. Si se deja, un obstáculo de 1.8 m se escala otra vez por
-   1.8 y acabas con una pared de 3.24 m. `CollisionSystem` lee la escala del transform,
-   así que el hitbox se iría con él y el bug sería consistente, invisible en tests, y
-   solo visible como "el juego me mató desde lejos".
+- `SpawnPowerUp` ya no reaplica `localScale = Vector3.one * 0.7` en cada rent. Era inocuo
+  para un cubo unitario; sobre una malla que ya mide 0,7 m la habría encogido otra vez en
+  cada spawn.
+- La estela del jugador cuelga de un `TrailAnchor` propio a media altura. Antes se
+  enganchaba al cubo, que casualmente estaba a media altura; con un wrapper cuyo origen
+  está en el suelo, el mismo código habría arrastrado la estela por el asfalto.
 
-### 4. Pivote del jugador
+**Y el pivote del jugador:** `GameBootstrap` ya no aplica el desplazamiento de media
+altura a mano. El provider devuelve un wrapper con el origen a ras de suelo en ambos
+casos — el greybox aplica el offset internamente, el personaje autorado ya tiene el
+pivote entre los pies.
 
-`GameBootstrap` L452 crea un `PlayerPivot` hijo y desplaza la malla media altura hacia
-arriba para que el padre quede a ras de suelo. Los personajes ya tienen el pivote entre
-los pies, así que ese hijo y su ajuste de media altura se pueden eliminar.
+### Tests
+
+`MeshProviderTests.cs` (6 tests nuevos) fija estas invariantes para que no puedan volver
+a romperse en silencio:
+
+- `Obstacles` y `ObstacleKinds` se mantienen paralelas durante miles de frames.
+- Y también tras `ClearObstaclesNear`, que borra por el medio de la lista y solo se
+  ejecuta cuando un escudo absorbe un golpe — bastante raro como para llegar a producción.
+- Los chunks reciclados no acumulan kinds obsoletos.
+- **Un provider que nunca toca la escala sigue colocando los obstáculos bien.** Este es el
+  test de regresión del arte autorado.
+- El greybox sigue estirando sus cubos exactamente como antes.
+- El visual del jugador tiene el origen en el suelo.
+
+Dos tests existentes en `TrackStreamerTests` identificaban el kind midiendo
+`localScale.y` contra la altura de cada arquetipo. Con mallas a escala 1 habrían medido
+1.0 y no habrían coincidido con nada: se habrían quedado **en verde para siempre sin
+probar nada**. Ahora leen `chunk.ObstacleKinds`, y de paso el segundo comprueba la altura
+de spawn de los tres kinds y no solo del colgante.
 
 ---
 

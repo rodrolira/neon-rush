@@ -120,6 +120,12 @@ namespace NeonRush.Composition
         private RunParticles _particles;
         private NeonMaterials _materials;
 
+        /// <summary>
+        /// What everything looks like. Chosen once at boot by <see cref="ResolveMeshProvider"/> and
+        /// handed to every system that spawns something visible.
+        /// </summary>
+        private IMeshProvider _meshes;
+
         private IDisposable _runEndedSubscription;
         private IDisposable _milestoneSubscription;
         private IDisposable _subscriptionAdSub;
@@ -418,6 +424,42 @@ namespace NeonRush.Composition
             MaybeOfferStarterPack();
         }
 
+        /// <summary>
+        /// Picks the greybox or the authored art, depending on whether a <see cref="ModelCatalog"/>
+        /// has been placed in Resources and has anything in it.
+        ///
+        /// The fallback is silent-by-design in one direction only: a missing catalog is the normal
+        /// state for a fresh clone or a CI run that skipped asset import, so it logs at info level
+        /// and the game runs. What it must never do is fail to boot because art is absent — the
+        /// greybox exists precisely so the loop can be played and tuned before any art lands.
+        ///
+        /// A catalog that exists but is empty is treated as absent rather than as an error: it is
+        /// the expected state the moment someone creates the asset and before they fill it in.
+        /// </summary>
+        private static IMeshProvider ResolveMeshProvider(NeonMaterials materials)
+        {
+            var greybox = new PrimitiveMeshProvider(materials);
+            var catalog = Resources.Load<ModelCatalog>(ModelCatalog.ResourcePath);
+
+            if (catalog == null)
+            {
+                Debug.Log($"[NeonRush] No model catalog at Resources/{ModelCatalog.ResourcePath}; " +
+                          "running on greybox visuals.");
+                return greybox;
+            }
+
+            if (!catalog.HasAnyArt)
+            {
+                Debug.Log("[NeonRush] Model catalog found but empty; running on greybox visuals.");
+                return greybox;
+            }
+
+            // The catalog keeps the greybox as its own fallback, so a half-filled catalog serves
+            // authored art where it has it and cubes everywhere else. That is what lets the art
+            // arrive one category at a time without the game ever being unplayable.
+            return new CatalogMeshProvider(catalog, greybox);
+        }
+
         private void BuildScene()
         {
             _materials = new NeonMaterials();
@@ -435,31 +477,29 @@ namespace NeonRush.Composition
             var world = new GameObject("World").transform;
             world.SetParent(transform, worldPositionStays: false);
 
+            _meshes = ResolveMeshProvider(_materials);
+
             // --- Player ---------------------------------------------------------------------
             const float playerHeight = 1.6f;
 
-            var playerGo = PrimitiveFactory.Cube(
-                "Player",
-                new Vector3(0.8f, playerHeight, 0.8f),
-                _materials.Get(NeonMaterials.Player));
-
-            playerGo.transform.SetParent(transform, worldPositionStays: false);
-
-            // The cube mesh is centred on its origin, so a child holds the visual offset upward and
-            // leaves the parent transform sitting on the ground plane. Everything downstream —
-            // lane maths, jump height, the collision AABB — can then treat y=0 as "feet on floor",
-            // which removes a half-height fudge factor from four separate places.
+            // The provider hands back a wrapper whose origin sits on the ground, whichever art it
+            // is serving. Everything downstream — lane maths, jump height, the collision AABB — can
+            // then treat y=0 as "feet on floor", which removes a half-height fudge from four
+            // separate places. Where that offset comes from is the provider's problem: the greybox
+            // cube needs it applied, an authored character already has its origin at the feet.
             var playerPivot = new GameObject("PlayerPivot").transform;
             playerPivot.SetParent(transform, worldPositionStays: false);
-            playerGo.transform.SetParent(playerPivot, worldPositionStays: false);
-            playerGo.transform.localPosition = new Vector3(0f, playerHeight * 0.5f, 0f);
+
+            var playerVisual = _meshes.CreatePlayer(playerHeight);
+            playerVisual.transform.SetParent(playerPivot, worldPositionStays: false);
+            playerVisual.transform.localPosition = Vector3.zero;
 
             _player = new PlayerMotor(playerPivot, _tuning, _bus, playerHeight);
             _playerRoot = playerPivot;
 
             // --- Track ----------------------------------------------------------------------
             var seed = _seed != 0 ? _seed : Environment.TickCount;
-            _track = new TrackStreamer(_tuning, world, _materials, seed);
+            _track = new TrackStreamer(_tuning, world, _materials, seed, _meshes);
 
             // Turn on pickup spawning at the configured rate. Left off if a remote push disables
             // power-ups, in which case the track spawns only obstacles and coins.
@@ -493,7 +533,18 @@ namespace NeonRush.Composition
 
             // The player's light trail: at speed it is the single clearest "you are going FAST"
             // signal on screen, and it costs one strip of triangles.
-            var trail = playerGo.AddComponent<TrailRenderer>();
+            //
+            // It hangs off its own anchor rather than off the player's visual. The visual used to
+            // be a single cube sitting at half-height, so attaching the trail to it happened to put
+            // the trail at the player's midriff; now the visual is a wrapper whose origin is on the
+            // floor, and the same code would drag the trail along the ground. An explicit anchor
+            // says where the trail belongs instead of inheriting it from whatever the art happens
+            // to be, so swapping characters cannot move it.
+            var trailAnchor = new GameObject("TrailAnchor").transform;
+            trailAnchor.SetParent(playerPivot, worldPositionStays: false);
+            trailAnchor.localPosition = new Vector3(0f, playerHeight * 0.5f, 0f);
+
+            var trail = trailAnchor.gameObject.AddComponent<TrailRenderer>();
             trail.material = _materials.Get(NeonMaterials.Player, emission: 2.2f);
             trail.time = 0.22f;
             trail.startWidth = 0.55f;
