@@ -115,6 +115,7 @@ namespace NeonRush.Composition
         private RunCameraRig _camera;
         private RunHud _hud;
         private RunJuice _juice;
+        private RunParticles _particles;
         private NeonMaterials _materials;
 
         private IDisposable _runEndedSubscription;
@@ -518,6 +519,9 @@ namespace NeonRush.Composition
             // The screen-space juice layer (impact flash + speed lines). Built on UI graphics so it
             // ships no shader of its own — see RunJuice for why that matters on this project.
             _juice = new RunJuice(uiRoot, _bus);
+
+            // World-space bursts (crash debris, coin sparkle, power-up flash), emitted at the player.
+            _particles = new RunParticles(transform, _materials, _bus, _playerRoot);
 
             _storeScreen = new StoreScreen(_catalog, _store, _wallet, _inventory, /*iap*/ ResolveIap(), _bus, uiRoot);
 
@@ -1025,6 +1029,7 @@ namespace NeonRush.Composition
             _vipScreen?.Dispose();
             _hud?.Dispose();
             _juice?.Dispose();
+            _particles?.Dispose();
             _track?.Dispose();
             _audio?.Dispose();
             _materials?.Dispose();
