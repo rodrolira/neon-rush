@@ -73,40 +73,63 @@ namespace NeonRush.Application.Stages
     {
         public static IReadOnlyList<Stage> Default() => new[]
         {
+            // Stage 1 is a two-minute tutorial-by-doing: one run, a handful of coins, a short distance.
+            // A new player clears it in their first session and feels the campaign reward them at once.
             new Stage(1, "First Steps", new[]
             {
+                new StageObjective(MissionMetric.CompleteRuns, 1, "Finish 1 run"),
+                new StageObjective(MissionMetric.CollectCoins, 40, "Collect 40 coins"),
+                new StageObjective(MissionMetric.TravelDistance, 400, "Travel 400 m"),
+            }, rewardCoins: 300, rewardGems: 0),
+
+            new Stage(2, "Warming Up", new[]
+            {
                 new StageObjective(MissionMetric.CompleteRuns, 3, "Finish 3 runs"),
-                new StageObjective(MissionMetric.CollectCoins, 100, "Collect 100 coins"),
-                new StageObjective(MissionMetric.TravelDistance, 1_000, "Travel 1,000 m"),
+                new StageObjective(MissionMetric.CollectCoins, 150, "Collect 150 coins"),
+                new StageObjective(MissionMetric.TravelDistance, 1_500, "Travel 1,500 m"),
             }, rewardCoins: 500, rewardGems: 0),
 
-            new Stage(2, "Neon Alleys", new[]
+            new Stage(3, "Neon Alleys", new[]
             {
                 new StageObjective(MissionMetric.CollectCoins, 300, "Collect 300 coins"),
                 new StageObjective(MissionMetric.Jump, 30, "Jump 30 times"),
                 new StageObjective(MissionMetric.TravelDistance, 3_000, "Travel 3,000 m"),
-            }, rewardCoins: 1_000, rewardGems: 5),
+            }, rewardCoins: 900, rewardGems: 5),
 
-            new Stage(3, "Rush Hour", new[]
+            new Stage(4, "Rush Hour", new[]
             {
                 new StageObjective(MissionMetric.SingleRunDistance, 800, "Run 800 m in one go"),
-                new StageObjective(MissionMetric.Slide, 20, "Slide 20 times"),
+                new StageObjective(MissionMetric.Slide, 25, "Slide 25 times"),
                 new StageObjective(MissionMetric.CollectCoins, 600, "Collect 600 coins"),
-            }, rewardCoins: 1_500, rewardGems: 5),
+            }, rewardCoins: 1_300, rewardGems: 5),
 
-            new Stage(4, "Overdrive", new[]
+            new Stage(5, "Overdrive", new[]
             {
                 new StageObjective(MissionMetric.SingleRunDistance, 1_200, "Run 1,200 m in one go"),
-                new StageObjective(MissionMetric.CompleteRuns, 10, "Finish 10 runs"),
+                new StageObjective(MissionMetric.CompleteRuns, 12, "Finish 12 runs"),
                 new StageObjective(MissionMetric.TravelDistance, 8_000, "Travel 8,000 m"),
-            }, rewardCoins: 2_500, rewardGems: 10),
+            }, rewardCoins: 2_000, rewardGems: 10),
 
-            new Stage(5, "Neon Legend", new[]
+            new Stage(6, "Gridlock", new[]
             {
-                new StageObjective(MissionMetric.CollectCoins, 2_000, "Collect 2,000 coins"),
-                new StageObjective(MissionMetric.Jump, 100, "Jump 100 times"),
+                new StageObjective(MissionMetric.CollectCoins, 1_200, "Collect 1,200 coins"),
+                new StageObjective(MissionMetric.Jump, 80, "Jump 80 times"),
+                new StageObjective(MissionMetric.Slide, 60, "Slide 60 times"),
+            }, rewardCoins: 2_800, rewardGems: 10),
+
+            new Stage(7, "Afterburner", new[]
+            {
+                new StageObjective(MissionMetric.SingleRunDistance, 1_800, "Run 1,800 m in one go"),
+                new StageObjective(MissionMetric.CompleteRuns, 20, "Finish 20 runs"),
                 new StageObjective(MissionMetric.TravelDistance, 15_000, "Travel 15,000 m"),
-            }, rewardCoins: 4_000, rewardGems: 15),
+            }, rewardCoins: 3_800, rewardGems: 15),
+
+            new Stage(8, "Neon Legend", new[]
+            {
+                new StageObjective(MissionMetric.CollectCoins, 3_000, "Collect 3,000 coins"),
+                new StageObjective(MissionMetric.SingleRunDistance, 2_500, "Run 2,500 m in one go"),
+                new StageObjective(MissionMetric.TravelDistance, 25_000, "Travel 25,000 m"),
+            }, rewardCoins: 5_000, rewardGems: 20),
         };
     }
 }

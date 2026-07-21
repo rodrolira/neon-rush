@@ -49,7 +49,9 @@ namespace NeonRush.Presentation.View
         private GameObject _stagePanel;
         private Text _stageTitle;
         private Text _stageReward;
-        private readonly List<Text> _stageRows = new();
+        private readonly List<Text> _stageDescs = new();
+        private readonly List<Text> _stageCounts = new();
+        private readonly List<Image> _stageFills = new();
 
         private GameObject _claimButton;
         private Text _claimLabel;
@@ -220,12 +222,32 @@ namespace NeonRush.Presentation.View
 
             for (var i = 0; i < 3; i++)
             {
-                var row = Label(panel.transform, $"StageObj{i}", new Vector2(0f, 1f), new Vector2(40f, -96f - i * 56f), TextAnchor.UpperLeft, 28);
-                row.rectTransform.sizeDelta = new Vector2(860f, 50f);
-                _stageRows.Add(row);
+                var y = -94f - i * 60f;
+
+                var desc = Label(panel.transform, $"StageDesc{i}", new Vector2(0f, 1f), new Vector2(40f, y), TextAnchor.UpperLeft, 27);
+                desc.rectTransform.sizeDelta = new Vector2(470f, 44f);
+                _stageDescs.Add(desc);
+
+                // A rounded progress bar on the right: a dark track with a coloured fill scaled by the
+                // objective's completion, and the count overlaid on top.
+                var track = RoundedImage(panel.transform, $"StageBarBg{i}", new Color(0.04f, 0.05f, 0.10f, 1f));
+                Place(track.rectTransform, new Vector2(0f, 1f), new Vector2(520f, y - 4f), new Vector2(380f, 34f));
+
+                var fill = RoundedImage(track.transform, $"StageBarFill{i}", NeonMaterials.Player);
+                fill.rectTransform.anchorMin = new Vector2(0f, 0f);
+                fill.rectTransform.anchorMax = new Vector2(0f, 1f); // width driven by anchorMax.x in refresh
+                fill.rectTransform.pivot = new Vector2(0f, 0.5f);
+                fill.rectTransform.offsetMin = Vector2.zero;
+                fill.rectTransform.offsetMax = Vector2.zero;
+                _stageFills.Add(fill);
+
+                var count = Label(track.transform, $"StageCount{i}", new Vector2(0.5f, 0.5f), Vector2.zero, TextAnchor.MiddleCenter, 24);
+                count.fontStyle = FontStyle.Bold;
+                Stretch(count.rectTransform);
+                _stageCounts.Add(count);
             }
 
-            _stageReward = Label(panel.transform, "StageReward", new Vector2(0.5f, 0f), new Vector2(0f, 20f), TextAnchor.LowerCenter, 28);
+            _stageReward = Label(panel.transform, "StageReward", new Vector2(0.5f, 0f), new Vector2(0f, 18f), TextAnchor.LowerCenter, 28);
             _stageReward.color = NeonMaterials.Coin;
         }
 
@@ -368,6 +390,9 @@ namespace NeonRush.Presentation.View
             }
         }
 
+        private static readonly Color BarDone = new(0.35f, 0.9f, 0.55f);
+        private static readonly Color BarActive = new(0.20f, 0.85f, 0.95f);
+
         private void RefreshStages()
         {
             if (_stagePanel == null) return;
@@ -380,40 +405,35 @@ namespace NeonRush.Presentation.View
 
             _stagePanel.SetActive(true);
 
-            if (_stages.IsAllComplete)
-            {
-                _stageTitle.text = "CAMPAIGN COMPLETE";
-                _stageRows[0].text = "Every stage cleared — legend status.";
-                _stageRows[0].color = new Color(0.4f, 0.9f, 0.6f);
-                for (var i = 1; i < _stageRows.Count; i++) _stageRows[i].text = string.Empty;
-                _stageReward.text = string.Empty;
-                return;
-            }
-
             var stage = _stages.CurrentStage;
-            _stageTitle.text = $"STAGE {stage.Number} · {stage.Name}";
+            var prestige = _stages.Prestige > 0 ? $"P{_stages.Prestige} · " : string.Empty;
+            _stageTitle.text = $"{prestige}STAGE {stage.Number} · {stage.Name}";
 
-            for (var i = 0; i < _stageRows.Count; i++)
+            for (var i = 0; i < _stageDescs.Count; i++)
             {
-                if (i >= stage.Objectives.Count)
-                {
-                    _stageRows[i].text = string.Empty;
-                    continue;
-                }
+                var has = i < stage.Objectives.Count;
+                _stageDescs[i].gameObject.SetActive(has);
+                _stageFills[i].transform.parent.gameObject.SetActive(has); // the bar track
+                if (!has) continue;
 
                 var objective = stage.Objectives[i];
                 var progress = _stages.ProgressAt(i);
                 var done = progress >= objective.Target;
+                var fraction = objective.Target > 0 ? Mathf.Clamp01(progress / (float)objective.Target) : 1f;
 
-                _stageRows[i].text = done
-                    ? $"✓ {objective.Description}"
-                    : $"{objective.Description}  —  {progress:N0}/{objective.Target:N0}";
+                _stageDescs[i].text = objective.Description;
+                _stageDescs[i].color = done ? BarDone : new Color(0.85f, 0.9f, 1f);
 
-                _stageRows[i].color = done ? new Color(0.4f, 0.9f, 0.6f) : new Color(0.85f, 0.9f, 1f);
+                _stageFills[i].rectTransform.anchorMax = new Vector2(fraction, 1f);
+                _stageFills[i].color = done ? BarDone : BarActive;
+
+                _stageCounts[i].text = done ? "✓" : $"{progress:N0}/{objective.Target:N0}";
             }
 
-            _stageReward.text = $"REWARD  +{stage.RewardCoins:N0} COINS" +
-                                (stage.RewardGems > 0 ? $"   +{stage.RewardGems} GEMS" : string.Empty);
+            // The reward shown is what will actually be paid — scaled by the current prestige.
+            var coins = stage.RewardCoins * _stages.RewardMultiplier;
+            var gems = stage.RewardGems * _stages.RewardMultiplier;
+            _stageReward.text = $"REWARD  +{coins:N0} COINS" + (gems > 0 ? $"   +{gems} GEMS" : string.Empty);
         }
 
         private void RefreshDaily()

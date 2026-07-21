@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NeonRush.Application.Events;
+using NeonRush.Application.Stages;
 using NeonRush.Application.Store;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Audio;
@@ -52,6 +53,9 @@ namespace NeonRush.Application.Audio
 
             // A completed purchase or claim confirms audibly.
             _subscriptions.Add(bus.Subscribe<PurchaseCompleted>(_ => _audio.Play(SoundId.Confirm)));
+
+            // Clearing a stage is a milestone — announce it with the same confident confirm cue.
+            _subscriptions.Add(bus.Subscribe<StageCompleted>(_ => _audio.Play(SoundId.Confirm)));
         }
 
         public void Dispose()

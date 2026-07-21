@@ -26,8 +26,8 @@ namespace NeonRush.Domain.Save
         /// </summary>
         public int Version { get; set; } = CurrentVersion;
 
-        /// <summary>The schema version this build writes. v2 added the battle-pass block; v3 added the audio-muted flag; v4 added the stage campaign.</summary>
-        public const int CurrentVersion = 4;
+        /// <summary>The schema version this build writes. v2 added the battle-pass block; v3 added the audio-muted flag; v4 added the stage campaign; v5 added stage prestige.</summary>
+        public const int CurrentVersion = 5;
 
         public int Coins { get; set; }
 
@@ -108,6 +108,9 @@ namespace NeonRush.Domain.Save
         /// <summary>Per-objective progress of the current stage. Cumulative and permanent until the stage is cleared.</summary>
         public List<int> StageProgress { get; set; } = new();
 
+        /// <summary>How many full passes of the stage ladder have been completed. Scales every stage reward.</summary>
+        public int StagePrestige { get; set; }
+
         /// <summary>One mission's persisted state. Flat and dumb on purpose — it is a wire format.</summary>
         public sealed class MissionSave
         {
@@ -155,6 +158,7 @@ namespace NeonRush.Domain.Save
             AudioMuted = AudioMuted,
             StageNumber = StageNumber,
             StageProgress = new List<int>(StageProgress),
+            StagePrestige = StagePrestige,
         };
 
         private List<MissionSave> CloneMissions()
@@ -195,6 +199,7 @@ namespace NeonRush.Domain.Save
             AudioMuted = false,
             StageNumber = 1,
             StageProgress = new List<int>(),
+            StagePrestige = 0,
         };
     }
 

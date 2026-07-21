@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NeonRush.Application.Events;
+using NeonRush.Application.Stages;
 using NeonRush.Core.Events;
 using NeonRush.Domain.PowerUps;
 using NeonRush.Presentation.Visuals;
@@ -54,6 +55,9 @@ namespace NeonRush.Presentation.View
 
             // The shield saving you deserves its own pop — reuse the power-up burst, bigger.
             _subscriptions.Add(bus.Subscribe<ShieldConsumed>(_ => Burst(_powerUp, 26)));
+
+            // Clearing a stage mid-run throws a big celebratory shower.
+            _subscriptions.Add(bus.Subscribe<StageCompleted>(_ => Burst(_powerUp, 40)));
         }
 
         private void OnRunEnded(RunEnded e)

@@ -384,7 +384,7 @@ namespace NeonRush.Composition
             // same gameplay events the daily missions read. Progress is restored from the save (a
             // stage number past the ladder's end simply means the campaign is already complete).
             _stages = new StageService(_wallet, _bus);
-            _stages.Restore(loaded.Data.StageNumber, loaded.Data.StageProgress);
+            _stages.Restore(loaded.Data.StageNumber, loaded.Data.StagePrestige, loaded.Data.StageProgress);
             _container.RegisterInstance(_stages);
             _save.Stages = _stages;
 

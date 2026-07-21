@@ -10,7 +10,8 @@ namespace NeonRush.Tests.EditMode
 {
     /// <summary>
     /// Tests for the stage campaign: objectives advance from gameplay events, a stage pays and
-    /// advances only when ALL of its objectives are done, and progress restores from a save.
+    /// advances only when ALL of its objectives are done, the ladder loops into prestige with scaled
+    /// rewards, and progress restores from a save.
     /// </summary>
     [TestFixture]
     public sealed class StageTests
@@ -31,11 +32,10 @@ namespace NeonRush.Tests.EditMode
         private static IReadOnlyList<Stage> OneStage(params StageObjective[] objectives) =>
             new[] { new Stage(1, "Test", objectives, rewardCoins: 100, rewardGems: 5) };
 
+        private StageService Build(IReadOnlyList<Stage> ladder) => new(_wallet, _bus, ladder);
+
         private void RunEnded(int distance) =>
             _bus.Publish(new RunEnded(1, distance, 0, 0, DeathCause.HitObstacle, 10f));
-
-        // The ctor takes (wallet, bus, ladder); tests read cleaner with a local builder.
-        private StageService Build(IReadOnlyList<Stage> ladder) => new(_wallet, _bus, ladder);
 
         [Test]
         public void Objectives_AdvanceFromEvents()
@@ -48,7 +48,7 @@ namespace NeonRush.Tests.EditMode
         }
 
         [Test]
-        public void CompletingEveryObjective_PaysTheReward_AndAdvances()
+        public void CompletingEveryObjective_PaysTheReward_AndLoopsToPrestige()
         {
             using var stages = Build(OneStage(
                 new StageObjective(MissionMetric.CollectCoins, 100, "coins"),
@@ -65,16 +65,36 @@ namespace NeonRush.Tests.EditMode
 
             Assert.That(completed, Has.Count.EqualTo(1));
             Assert.That(completed[0].Number, Is.EqualTo(1));
-            Assert.That(_wallet.Balance(CurrencyType.Coins), Is.EqualTo(100), "Stage reward coins must be credited.");
-            Assert.That(_wallet.Balance(CurrencyType.Gems), Is.EqualTo(5), "Stage reward gems must be credited.");
-            Assert.That(stages.IsAllComplete, Is.True, "Clearing the only stage completes the campaign.");
+            Assert.That(completed[0].Prestige, Is.EqualTo(0), "The first clear happens at prestige 0.");
+            Assert.That(_wallet.Balance(CurrencyType.Coins), Is.EqualTo(100));
+            Assert.That(_wallet.Balance(CurrencyType.Gems), Is.EqualTo(5));
+
+            // Clearing the only stage loops back to stage one at the next prestige — never a dead end.
+            Assert.That(stages.Prestige, Is.EqualTo(1));
+            Assert.That(stages.CurrentStageNumber, Is.EqualTo(1));
+            Assert.That(stages.ProgressAt(0), Is.EqualTo(0), "The looped stage starts fresh.");
+        }
+
+        [Test]
+        public void Rewards_ScaleWithPrestige()
+        {
+            using var stages = Build(OneStage(new StageObjective(MissionMetric.CompleteRuns, 1, "run")));
+            stages.Restore(1, prestige: 1, savedProgress: null); // already one loop deep
+
+            RunEnded(100); // clears the stage at prestige 1
+
+            // Prestige 1 pays double (multiplier = 1 + prestige).
+            Assert.That(_wallet.Balance(CurrencyType.Coins), Is.EqualTo(200));
+            Assert.That(_wallet.Balance(CurrencyType.Gems), Is.EqualTo(10));
+            Assert.That(stages.Prestige, Is.EqualTo(2));
         }
 
         [Test]
         public void SingleRunDistance_IsAHighWaterMark_NotASum()
         {
             using var stages = Build(OneStage(
-                new StageObjective(MissionMetric.SingleRunDistance, 800, "sprint")));
+                new StageObjective(MissionMetric.SingleRunDistance, 800, "sprint"),
+                new StageObjective(MissionMetric.Jump, 999, "jumps"))); // keep the stage open
 
             RunEnded(500);
             Assert.That(stages.ProgressAt(0), Is.EqualTo(500));
@@ -82,8 +102,8 @@ namespace NeonRush.Tests.EditMode
             RunEnded(300); // a worse run must not add, nor reduce
             Assert.That(stages.ProgressAt(0), Is.EqualTo(500));
 
-            RunEnded(900); // a better run clears it (capped at the target)
-            Assert.That(stages.IsAllComplete, Is.True);
+            RunEnded(900); // a better run reaches the target (capped)
+            Assert.That(stages.ProgressAt(0), Is.EqualTo(800));
         }
 
         [Test]
@@ -99,23 +119,18 @@ namespace NeonRush.Tests.EditMode
         }
 
         [Test]
-        public void AfterTheLastStage_NoFurtherAdvanceAndNoCrash()
+        public void LoopingIsInfinite_AndNeverCrashes()
         {
             using var stages = Build(OneStage(new StageObjective(MissionMetric.CompleteRuns, 1, "run")));
 
-            RunEnded(100); // clears the only stage
-            Assert.That(stages.IsAllComplete, Is.True);
+            for (var i = 0; i < 5; i++) RunEnded(100); // clear it five times over
 
-            // More events must be harmless once the campaign is done.
-            Assert.DoesNotThrow(() =>
-            {
-                _bus.Publish(new CoinCollected(50, 50));
-                RunEnded(500);
-            });
+            Assert.That(stages.Prestige, Is.EqualTo(5));
+            Assert.That(stages.CurrentStageNumber, Is.EqualTo(1));
         }
 
         [Test]
-        public void Restore_SetsTheStageAndProgress()
+        public void Restore_SetsTheStagePrestigeAndProgress()
         {
             var ladder = new[]
             {
@@ -124,20 +139,21 @@ namespace NeonRush.Tests.EditMode
             };
 
             using var stages = new StageService(_wallet, _bus, ladder);
-            stages.Restore(2, new[] { 120 });
+            stages.Restore(2, prestige: 3, savedProgress: new[] { 120 });
 
             Assert.That(stages.CurrentStageNumber, Is.EqualTo(2));
+            Assert.That(stages.Prestige, Is.EqualTo(3));
             Assert.That(stages.ProgressAt(0), Is.EqualTo(120));
         }
 
         [Test]
-        public void Restore_BeyondTheLadder_MarksTheCampaignComplete()
+        public void Restore_BeyondTheLadder_ClampsIntoRange()
         {
             using var stages = Build(OneStage(new StageObjective(MissionMetric.CompleteRuns, 1, "run")));
 
-            stages.Restore(99, null);
+            stages.Restore(99, prestige: 0, savedProgress: null);
 
-            Assert.That(stages.IsAllComplete, Is.True);
+            Assert.That(stages.CurrentStageNumber, Is.EqualTo(1));
         }
     }
 }

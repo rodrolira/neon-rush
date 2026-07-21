@@ -5,6 +5,7 @@ using NeonRush.Application.Ads;
 using NeonRush.Application.Events;
 using NeonRush.Application.PowerUps;
 using NeonRush.Application.Run;
+using NeonRush.Application.Stages;
 using NeonRush.Core.Events;
 using NeonRush.Domain.Economy;
 using UnityEngine;
@@ -79,7 +80,41 @@ namespace NeonRush.Presentation.View
             // motion in the periphery to register as "got it" rather than a number silently ticking.
             _subscriptions.Add(bus.Subscribe<CoinCollected>(_ => _coinPunch = 1f));
 
+            // Clearing a stage mid-run flashes a celebratory banner (the sound and particles fire from
+            // their own subscribers). The reward numbers come straight off the event, already scaled.
+            _subscriptions.Add(bus.Subscribe<StageCompleted>(OnStageCompleted));
+
             SetBank(wallet.Balance(CurrencyType.Coins));
+        }
+
+        private Text _stageToast;
+        private float _toastRemaining;
+
+        /// <summary>How long the stage-cleared banner stays up, in real seconds.</summary>
+        private const float ToastDuration = 3f;
+
+        private void OnStageCompleted(StageCompleted e)
+        {
+            var prestige = e.Prestige > 0 ? $"PRESTIGE {e.Prestige} · " : string.Empty;
+            var gems = e.RewardGems > 0 ? $"   +{e.RewardGems} GEMS" : string.Empty;
+
+            _stageToast.text = $"{prestige}STAGE {e.Number} CLEARED!\n+{e.RewardCoins:N0} COINS{gems}";
+            _toastRemaining = ToastDuration;
+        }
+
+        /// <summary>Fades the stage-cleared banner out over its final second, on the unscaled clock.</summary>
+        private void TickToast()
+        {
+            if (_toastRemaining <= 0f) return;
+
+            _toastRemaining -= Time.unscaledDeltaTime;
+
+            var alpha = _toastRemaining <= 0f ? 0f : Mathf.Clamp01(_toastRemaining);
+            var colour = _stageToast.color;
+            colour.a = alpha;
+            _stageToast.color = colour;
+
+            if (_toastRemaining <= 0f) _stageToast.text = string.Empty;
         }
 
         private float _coinPunch;
@@ -97,6 +132,7 @@ namespace NeonRush.Presentation.View
         public void Tick()
         {
             TickCoinPunch();
+            TickToast();
 
             if (!_session.IsRunning) return;
 
@@ -262,6 +298,13 @@ namespace NeonRush.Presentation.View
             // without covering the track. Warm gold to stand apart from the cyan run counters.
             _powerUpStatus = Label(canvasGo.transform, "PowerUpStatus", new Vector2(0.5f, 0f), new Vector2(0f, 150f), TextAnchor.LowerCenter, 40);
             _powerUpStatus.color = new Color(1f, 0.92f, 0.45f);
+
+            // Stage-cleared celebration banner: big, centred, high up so it does not cover the track.
+            // Starts transparent; OnStageCompleted fills it and TickToast fades it back out.
+            _stageToast = Label(canvasGo.transform, "StageToast", new Vector2(0.5f, 0.5f), new Vector2(0f, 340f), TextAnchor.MiddleCenter, 58);
+            _stageToast.rectTransform.sizeDelta = new Vector2(1000f, 260f);
+            _stageToast.fontStyle = FontStyle.Bold;
+            _stageToast.color = new Color(1f, 0.85f, 0.25f, 0f);
 
             BuildGameOverPanel(canvasGo.transform);
         }

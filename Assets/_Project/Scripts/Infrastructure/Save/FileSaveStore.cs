@@ -308,6 +308,7 @@ namespace NeonRush.Infrastructure.Save
             // which StageService treats as "the first stage" — a clean migration into stage one.
             public int stageNumber;
             public int[] stageProgress;
+            public int stagePrestige;
 
             [Serializable]
             public sealed class MissionDto
@@ -345,6 +346,7 @@ namespace NeonRush.Infrastructure.Save
                 audioMuted = data.AudioMuted,
                 stageNumber = data.StageNumber,
                 stageProgress = data.StageProgress?.ToArray() ?? Array.Empty<int>(),
+                stagePrestige = data.StagePrestige,
                 savedAtUtcTicks = data.SavedAtUtc.Ticks,
             };
 
@@ -395,6 +397,7 @@ namespace NeonRush.Infrastructure.Save
                 AudioMuted = audioMuted,
                 StageNumber = stageNumber,
                 StageProgress = ToIntList(stageProgress),
+                StagePrestige = Math.Max(0, stagePrestige),
 
                 // Clamp rather than trust: a corrupted or hand-edited tick count outside DateTime's
                 // legal range throws inside the DateTime constructor, which would turn a bad save

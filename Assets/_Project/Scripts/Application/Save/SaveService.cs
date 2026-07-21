@@ -244,6 +244,7 @@ namespace NeonRush.Application.Save
             {
                 data.StageNumber = Stages.CurrentStageNumber;
                 data.StageProgress = new List<int>(Stages.ProgressSnapshot());
+                data.StagePrestige = Stages.Prestige;
             }
 
             _profile.WriteTo(data);
