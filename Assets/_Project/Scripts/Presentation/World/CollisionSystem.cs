@@ -1,6 +1,7 @@
 using NeonRush.Application.Events;
 using NeonRush.Application.PowerUps;
 using NeonRush.Application.Run;
+using NeonRush.Domain.Run;
 using NeonRush.Presentation.Player;
 using UnityEngine;
 
@@ -179,13 +180,29 @@ namespace NeonRush.Presentation.World
 
                 if (Mathf.Abs(position.z) > TestWindow) continue;
 
-                // Obstacle hitboxes are shrunk ~15% relative to the mesh. This is deliberate and it
-                // is one of the highest-leverage feel decisions in the whole game: a hitbox that
+                // The hitbox is sized from the archetype, NOT from the obstacle's transform scale.
+                //
+                // This used to read transform.localScale, which was correct only for as long as
+                // every obstacle was a unit cube stretched to its archetype's dimensions. An
+                // authored mesh is modelled at its true size and imported at scale 1, so the old
+                // code would have quietly shrunk every hitbox to a 1 m cube: the player would pass
+                // through the visible edges of obstacles and die to thin air in the middle. Nothing
+                // would have failed loudly — the game would just have started lying.
+                //
+                // ObstacleArchetype is the single definition of how big each kind is, and it is
+                // where the jump and slide clearances are tuned. Sizing the hitbox from it means
+                // the art can be replaced freely and the collision volume cannot drift.
+                var archetype = ObstacleArchetype.For(chunk.ObstacleKinds[i]);
+
+                // Hitboxes are then shrunk ~15% relative to the archetype. This is deliberate and
+                // it is one of the highest-leverage feel decisions in the whole game: a hitbox that
                 // exactly matches the art produces deaths the player is certain they should have
                 // survived. Players do not perceive a slightly generous hitbox as easy — they
                 // perceive an exact one as unfair. Err toward the player, always.
-                var scale = obstacle.transform.localScale;
-                var hitbox = new Bounds(position, new Vector3(scale.x * 0.85f, scale.y * 0.9f, scale.z * 0.85f));
+                var hitbox = new Bounds(position, new Vector3(
+                    archetype.Width * 0.85f,
+                    archetype.Height * 0.9f,
+                    archetype.Depth * 0.85f));
 
                 if (hitbox.Intersects(playerBounds)) return true;
             }

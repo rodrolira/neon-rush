@@ -13,6 +13,20 @@ namespace NeonRush.Presentation.World
     {
         public GameObject Root;
         public readonly List<GameObject> Obstacles = new();
+
+        /// <summary>
+        /// The kind of each obstacle, parallel with <see cref="Obstacles"/>.
+        ///
+        /// This exists so the collision system can size a hitbox from the archetype rather than
+        /// from the obstacle's <c>transform.localScale</c>. Reading the scale worked only while
+        /// every obstacle was a unit cube stretched to size; the moment a real mesh authored at its
+        /// true dimensions arrives, its scale is 1 and the hitbox silently collapses to a 1 m cube.
+        /// Deriving the hitbox from the same struct that defines the archetype makes the art and
+        /// the collision volume impossible to desynchronise — you cannot change one without the
+        /// other, because there is only one of them.
+        /// </summary>
+        public readonly List<ObstacleKind> ObstacleKinds = new();
+
         public readonly List<GameObject> Coins = new();
 
         /// <summary>Coins already banked this pass, so a coin cannot be collected twice.</summary>
@@ -356,6 +370,12 @@ namespace NeonRush.Presentation.World
 
                     _obstaclePool.Return(obstacle);
                     obstacles.RemoveAt(i);
+
+                    // Kept in lockstep. If these two lists ever drift, every obstacle after the
+                    // removal point is tested against the wrong archetype's hitbox — a bug that
+                    // only shows up after a shield absorbs a hit, which is rare enough to reach
+                    // production. Iterating backwards is what makes the paired RemoveAt safe.
+                    chunk.ObstacleKinds.RemoveAt(i);
                 }
             }
         }
@@ -441,6 +461,7 @@ namespace NeonRush.Presentation.World
             }
 
             chunk.Obstacles.Clear();
+            chunk.ObstacleKinds.Clear();
             chunk.Coins.Clear();
             chunk.CoinTaken.Clear();
             chunk.PowerUps.Clear();
@@ -569,10 +590,15 @@ namespace NeonRush.Presentation.World
         }
 
         /// <summary>
-        /// Rents a pooled cube and shapes it into the given obstacle kind: scaled to the archetype's
-        /// dimensions and raised to its centre height, so a hanging slide-under barrier floats and a
-        /// grounded block sits on the floor. The collision system reads the cube's localScale, so the
-        /// hitbox follows the size automatically — no per-kind collision code exists or is needed.
+        /// Rents a pooled obstacle and shapes it into the given kind, raised to the archetype's
+        /// centre height so a hanging slide-under barrier floats and a grounded block sits on the
+        /// floor.
+        ///
+        /// How the instance is made to *look* like that kind is the mesh provider's business: the
+        /// greybox provider stretches a unit cube, while a provider backed by authored art swaps
+        /// which child mesh is visible and leaves the scale at 1. Either way the collision hitbox
+        /// is unaffected, because it is derived from <see cref="ObstacleArchetype"/> via
+        /// <see cref="Chunk.ObstacleKinds"/> and not from the transform.
         /// </summary>
         private void SpawnObstacle(Chunk chunk, ObstacleKind kind, float x, float localZ)
         {
@@ -580,10 +606,12 @@ namespace NeonRush.Presentation.World
 
             var obstacle = _obstaclePool.Rent();
             obstacle.transform.SetParent(chunk.Root.transform, worldPositionStays: false);
-            obstacle.transform.localScale = new Vector3(archetype.Width, archetype.Height, archetype.Depth);
             obstacle.transform.localPosition = new Vector3(x, archetype.CentreY, localZ);
 
+            _meshes.ApplyObstacle(obstacle, kind, archetype);
+
             chunk.Obstacles.Add(obstacle);
+            chunk.ObstacleKinds.Add(kind);
         }
 
         /// <summary>Builds the visual shell of a chunk: road, lane markers, and the flanking skyline.</summary>
