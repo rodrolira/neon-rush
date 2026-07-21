@@ -1,0 +1,1054 @@
+{
+  "project": "Neon Rush",
+  "studio": "MoonCat Studio",
+  "unit": "1 unit = 1 metre",
+  "convention": {
+    "up": "+Y",
+    "forward": "-Z (glTF). Unity's glTF importers flip Z, so these arrive facing +Z, which is the run direction.",
+    "handedness": "right-handed (glTF); Unity converts on import"
+  },
+  "formats": [
+    "glb (primary)",
+    "gltf + bin",
+    "png textures"
+  ],
+  "textures": [
+    "TEX_Road_BaseColor.png",
+    "TEX_Road_ORM.png",
+    "TEX_Road_Emissive.png",
+    "TEX_Facade_BaseColor.png",
+    "TEX_Facade_ORM.png",
+    "TEX_Facade_Emissive.png",
+    "TEX_CoinFace_BaseColor.png",
+    "TEX_CoinFace_ORM.png",
+    "TEX_CoinFace_Emissive.png"
+  ],
+  "materials": {
+    "MAT_Neon_Cyan": {
+      "baseColor": [
+        0.2,
+        1.0,
+        0.851
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.35,
+      "emissionStrength": 1.6,
+      "textured": false
+    },
+    "MAT_Neon_Magenta": {
+      "baseColor": [
+        1.0,
+        0.1804,
+        0.451
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.35,
+      "emissionStrength": 1.6,
+      "textured": false
+    },
+    "MAT_Neon_Gold": {
+      "baseColor": [
+        1.0,
+        0.8196,
+        0.251
+      ],
+      "alpha": 1.0,
+      "metallic": 0.85,
+      "roughness": 0.25,
+      "emissionStrength": 1.6,
+      "textured": false
+    },
+    "MAT_Neon_Violet": {
+      "baseColor": [
+        0.349,
+        0.251,
+        0.851
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.4,
+      "emissionStrength": 1.4,
+      "textured": false
+    },
+    "MAT_Neon_Blue": {
+      "baseColor": [
+        0.349,
+        0.6,
+        1.0
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.3,
+      "emissionStrength": 2.2,
+      "textured": false
+    },
+    "MAT_Neon_Pink": {
+      "baseColor": [
+        1.0,
+        0.251,
+        0.749
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.35,
+      "emissionStrength": 1.8,
+      "textured": false
+    },
+    "MAT_Neon_Lilac": {
+      "baseColor": [
+        0.549,
+        0.349,
+        1.0
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.35,
+      "emissionStrength": 1.8,
+      "textured": false
+    },
+    "MAT_Neon_White": {
+      "baseColor": [
+        0.9216,
+        0.9608,
+        1.0
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.3,
+      "emissionStrength": 1.2,
+      "textured": false
+    },
+    "MAT_Dark_Asphalt": {
+      "baseColor": [
+        0.0588,
+        0.0588,
+        0.102
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.85,
+      "emissionStrength": 0.0,
+      "textured": false
+    },
+    "MAT_Dark_Chassis": {
+      "baseColor": [
+        0.051,
+        0.0392,
+        0.1098
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.75,
+      "emissionStrength": 0.0,
+      "textured": false
+    },
+    "MAT_Metal_Steel": {
+      "baseColor": [
+        0.2196,
+        0.2314,
+        0.298
+      ],
+      "alpha": 1.0,
+      "metallic": 0.75,
+      "roughness": 0.4,
+      "emissionStrength": 0.0,
+      "textured": false
+    },
+    "MAT_Dark_Void": {
+      "baseColor": [
+        0.102,
+        0.0196,
+        0.2
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.3,
+      "emissionStrength": 0.35,
+      "textured": false
+    },
+    "MAT_Glass_Tint": {
+      "baseColor": [
+        0.349,
+        0.6,
+        1.0
+      ],
+      "alpha": 0.451,
+      "metallic": 0.0,
+      "roughness": 0.1,
+      "emissionStrength": 0.9,
+      "textured": false
+    },
+    "MAT_Road_Panel": {
+      "baseColor": [
+        0.0588,
+        0.0588,
+        0.102
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.85,
+      "emissionStrength": 0.25,
+      "textured": true
+    },
+    "MAT_Facade_Lit": {
+      "baseColor": [
+        0.051,
+        0.0392,
+        0.1098
+      ],
+      "alpha": 1.0,
+      "metallic": 0.0,
+      "roughness": 0.6,
+      "emissionStrength": 0.6,
+      "textured": true
+    },
+    "MAT_Coin_Face": {
+      "baseColor": [
+        1.0,
+        0.8196,
+        0.251
+      ],
+      "alpha": 1.0,
+      "metallic": 0.85,
+      "roughness": 0.25,
+      "emissionStrength": 1.6,
+      "textured": true
+    }
+  },
+  "models": [
+    {
+      "name": "CHR_Runner_Default",
+      "category": "Characters",
+      "file": "Models/Characters/CHR_Runner_Default.glb",
+      "function": "Default playable character. Replaces the cyan cube built in GameBootstrap.",
+      "pivot": "Between the feet, y = 0, ground level",
+      "triangles": 772,
+      "parts": 25,
+      "extents_m": [
+        0.74,
+        1.595,
+        0.39
+      ],
+      "bounds_min_m": [
+        -0.37,
+        0.0,
+        -0.2
+      ],
+      "bounds_max_m": [
+        0.37,
+        1.595,
+        0.19
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Metal_Steel",
+        "MAT_Neon_Cyan"
+      ],
+      "glb_bytes": 25004,
+      "notes": "The free starter. Deliberately the plainest silhouette in the set so every purchasable character is a visible upgrade."
+    },
+    {
+      "name": "CHR_Runner_Nova",
+      "category": "Characters",
+      "file": "Models/Characters/CHR_Runner_Nova.glb",
+      "function": "Purchasable character 'char_nova' (2,500 coins).",
+      "pivot": "Between the feet, y = 0, ground level",
+      "triangles": 808,
+      "parts": 28,
+      "extents_m": [
+        0.74,
+        1.665,
+        0.39
+      ],
+      "bounds_min_m": [
+        -0.37,
+        0.0,
+        -0.2
+      ],
+      "bounds_max_m": [
+        0.37,
+        1.665,
+        0.19
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Neon_Cyan",
+        "MAT_Neon_Violet"
+      ],
+      "glb_bytes": 27576,
+      "notes": "Aero crest and calf fins mark it as the speed-read character."
+    },
+    {
+      "name": "CHR_Runner_Nova_Void",
+      "category": "Characters",
+      "file": "Models/Characters/CHR_Runner_Nova_Void.glb",
+      "function": "Skin 'skin_nova_void' (350 gems). Nova's geometry, Void materials.",
+      "pivot": "Between the feet, y = 0, ground level",
+      "triangles": 808,
+      "parts": 28,
+      "extents_m": [
+        0.74,
+        1.665,
+        0.39
+      ],
+      "bounds_min_m": [
+        -0.37,
+        0.0,
+        -0.2
+      ],
+      "bounds_max_m": [
+        0.37,
+        1.665,
+        0.19
+      ],
+      "materials": [
+        "MAT_Dark_Void",
+        "MAT_Neon_Lilac",
+        "MAT_Neon_Pink"
+      ],
+      "glb_bytes": 27764,
+      "notes": "Shares Nova's mesh exactly — a skin must never change the silhouette, or players read it as a hitbox change. Only the material set differs, so at runtime this can be a material swap on the Nova mesh rather than a second mesh in memory."
+    },
+    {
+      "name": "CHR_Runner_Rook",
+      "category": "Characters",
+      "file": "Models/Characters/CHR_Runner_Rook.glb",
+      "function": "Purchasable character 'char_rook' (7,500 coins).",
+      "pivot": "Between the feet, y = 0, ground level",
+      "triangles": 916,
+      "parts": 29,
+      "extents_m": [
+        0.888,
+        1.595,
+        0.39
+      ],
+      "bounds_min_m": [
+        -0.444,
+        0.0,
+        -0.2
+      ],
+      "bounds_max_m": [
+        0.444,
+        1.595,
+        0.19
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Metal_Steel",
+        "MAT_Neon_Magenta"
+      ],
+      "glb_bytes": 28928,
+      "notes": "Armoured and blocky — the prestige tier. Heavier build, identical collision footprint: cosmetics never touch balance (StoreItem.cs)."
+    },
+    {
+      "name": "OBS_LowJump_Barrier",
+      "category": "Obstacles",
+      "file": "Models/Obstacles/OBS_LowJump_Barrier.glb",
+      "function": "ObstacleKind.LowJump — a grounded block cleared only by jumping.",
+      "pivot": "Box centre (0,0,0). Place at ObstacleArchetype.CentreY = 0.35 m.",
+      "triangles": 164,
+      "parts": 11,
+      "extents_m": [
+        1.8,
+        0.7,
+        1.2
+      ],
+      "bounds_min_m": [
+        -0.9,
+        -0.35,
+        -0.6
+      ],
+      "bounds_max_m": [
+        0.9,
+        0.35,
+        0.6
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Metal_Steel",
+        "MAT_Neon_Magenta"
+      ],
+      "glb_bytes": 9764,
+      "notes": "Chevrons point up because the required input is up. The player has ~250 ms to read this at 30 m/s; an arrow is faster to parse than a colour convention they have to learn."
+    },
+    {
+      "name": "OBS_HighSlide_Gate",
+      "category": "Obstacles",
+      "file": "Models/Obstacles/OBS_HighSlide_Gate.glb",
+      "function": "ObstacleKind.HighSlide — an overhead barrier cleared only by sliding.",
+      "pivot": "Box centre (0,0,0). Place at ObstacleArchetype.CentreY = 1.6 m.",
+      "triangles": 200,
+      "parts": 17,
+      "extents_m": [
+        1.8,
+        1.0,
+        1.2
+      ],
+      "bounds_min_m": [
+        -0.9,
+        -0.5,
+        -0.6
+      ],
+      "bounds_max_m": [
+        0.9,
+        0.5,
+        0.6
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Metal_Steel",
+        "MAT_Neon_Magenta"
+      ],
+      "glb_bytes": 13348,
+      "notes": "Nothing in this mesh drops below the box's own bottom edge. That is the hard constraint: the gap beneath is the entire mechanic, and a decorative strut hanging 5 cm too low would kill a correct slide."
+    },
+    {
+      "name": "OBS_FullBlock_Wall",
+      "category": "Obstacles",
+      "file": "Models/Obstacles/OBS_FullBlock_Wall.glb",
+      "function": "ObstacleKind.FullBlock — a full-height wall; the only answer is a lane change.",
+      "pivot": "Box centre (0,0,0). Place at ObstacleArchetype.CentreY = 0.8 m.",
+      "triangles": 144,
+      "parts": 10,
+      "extents_m": [
+        1.8,
+        1.6,
+        1.2
+      ],
+      "bounds_min_m": [
+        -0.9,
+        -0.8,
+        -0.6
+      ],
+      "bounds_max_m": [
+        0.9,
+        0.8,
+        0.6
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Metal_Steel",
+        "MAT_Neon_Magenta"
+      ],
+      "glb_bytes": 9232,
+      "notes": "Reads as unambiguously solid: a filled grid rather than the open framing of the other two. The lateral arrows tell the player the answer is sideways, since there is no vertical solution to find."
+    },
+    {
+      "name": "PU_Coin",
+      "category": "Pickups",
+      "file": "Models/Pickups/PU_Coin.glb",
+      "function": "The run currency. Replaces PrimitiveFactory.Coin (radius 0.35 m).",
+      "pivot": "Disc centre. Place at TrackStreamer.CoinHeight = 0.9 m.",
+      "triangles": 156,
+      "parts": 1,
+      "extents_m": [
+        0.7,
+        0.7,
+        0.06
+      ],
+      "bounds_min_m": [
+        -0.35,
+        -0.35,
+        -0.03
+      ],
+      "bounds_max_m": [
+        0.35,
+        0.35,
+        0.03
+      ],
+      "materials": [
+        "MAT_Coin_Face"
+      ],
+      "glb_bytes": 13644,
+      "notes": "Disc axis runs along Z so the face is square to the camera, matching the 90-degrees-on-X rotation PrimitiveFactory.Coin already applies. The bevelled rim keeps a lit sliver visible while it bobs; a flat cylinder vanishes edge-on and the coin appears to flicker out."
+    },
+    {
+      "name": "PU_Magnet",
+      "category": "Pickups",
+      "file": "Models/Pickups/PU_Magnet.glb",
+      "function": "PowerUpType.Magnet — pulls nearby coins in for a few seconds.",
+      "pivot": "Bounding-box centre. Place at TrackStreamer.PowerUpHeight = 1.0 m.",
+      "triangles": 168,
+      "parts": 6,
+      "extents_m": [
+        0.46,
+        0.59,
+        0.46
+      ],
+      "bounds_min_m": [
+        -0.23,
+        -0.3,
+        -0.23
+      ],
+      "bounds_max_m": [
+        0.23,
+        0.29,
+        0.23
+      ],
+      "materials": [
+        "MAT_Neon_Cyan",
+        "MAT_Neon_White"
+      ],
+      "glb_bytes": 7008,
+      "notes": "A literal horseshoe magnet with lit pole tips. Silhouette over colour: the three pickups are told apart while tumbling, when colour is washing out into the bloom and only the outline survives."
+    },
+    {
+      "name": "PU_Shield",
+      "category": "Pickups",
+      "file": "Models/Pickups/PU_Shield.glb",
+      "function": "PowerUpType.Shield — absorbs the next hit. A charge, not a timer.",
+      "pivot": "Bounding-box centre. Place at TrackStreamer.PowerUpHeight = 1.0 m.",
+      "triangles": 64,
+      "parts": 4,
+      "extents_m": [
+        0.68,
+        0.5889,
+        0.46
+      ],
+      "bounds_min_m": [
+        -0.34,
+        -0.2944,
+        -0.09
+      ],
+      "bounds_max_m": [
+        0.34,
+        0.2944,
+        0.37
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Glass_Tint",
+        "MAT_Neon_Blue",
+        "MAT_Neon_White"
+      ],
+      "glb_bytes": 5404,
+      "notes": "Faceted crystal core inside an open hex ring. The ring is the visual promise of a barrier; the translucent core is the one place in the project a blended material earns its overdraw, because the pickup is on screen for under a second and never in bulk."
+    },
+    {
+      "name": "PU_DoubleScore",
+      "category": "Pickups",
+      "file": "Models/Pickups/PU_DoubleScore.glb",
+      "function": "PowerUpType.DoubleScore — multiplies distance score for a few seconds.",
+      "pivot": "Bounding-box centre. Place at TrackStreamer.PowerUpHeight = 1.0 m.",
+      "triangles": 172,
+      "parts": 11,
+      "extents_m": [
+        0.6098,
+        0.6098,
+        0.47
+      ],
+      "bounds_min_m": [
+        -0.3049,
+        -0.3049,
+        -0.235
+      ],
+      "bounds_max_m": [
+        0.3049,
+        0.3049,
+        0.235
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Neon_Gold"
+      ],
+      "glb_bytes": 9440,
+      "notes": "A raised x2 glyph on a gold tablet. Numerals beat abstraction here: the multiplier is the only pickup whose value is a quantity, and the player should not have to remember which colour meant how much."
+    },
+    {
+      "name": "TRK_RoadSlab_30m",
+      "category": "Track",
+      "file": "Models/Track/TRK_RoadSlab_30m.glb",
+      "function": "One 30 m road chunk. Replaces the road cube built in TrackStreamer.BuildChunkShell.",
+      "pivot": "Slab centre. Matches localPosition (0, -0.1, ChunkLength*0.5).",
+      "triangles": 36,
+      "parts": 3,
+      "extents_m": [
+        9.0,
+        0.3,
+        30.0
+      ],
+      "bounds_min_m": [
+        -4.5,
+        -0.1,
+        -15.0
+      ],
+      "bounds_max_m": [
+        4.5,
+        0.2,
+        15.0
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Road_Panel"
+      ],
+      "glb_bytes": 510624,
+      "notes": "Modelled at exactly one ChunkLength so chunks butt together with no seam and no scaling. The UVs tile once per 3 m, which is short enough that the panel seams give a speed cue and long enough that they do not strobe at 30 m/s."
+    },
+    {
+      "name": "TRK_LaneMarker_30m",
+      "category": "Track",
+      "file": "Models/Track/TRK_LaneMarker_30m.glb",
+      "function": "One lane divider. Replaces the lane marker cubes in TrackStreamer.",
+      "pivot": "Strip centre. Place at x = +/- LaneWidth*0.5, y = 0.005.",
+      "triangles": 12,
+      "parts": 1,
+      "extents_m": [
+        0.08,
+        0.02,
+        30.0
+      ],
+      "bounds_min_m": [
+        -0.04,
+        -0.01,
+        -15.0
+      ],
+      "bounds_max_m": [
+        0.04,
+        0.01,
+        15.0
+      ],
+      "materials": [
+        "MAT_Neon_Violet"
+      ],
+      "glb_bytes": 1664,
+      "notes": "Kept as a continuous strip rather than dashes: dashes at 30 m/s alias into a strobe on a 60 Hz panel, and the marker's job is to be a stable reference the eye can track, not decoration."
+    },
+    {
+      "name": "TRK_EdgeRail_30m",
+      "category": "Track",
+      "file": "Models/Track/TRK_EdgeRail_30m.glb",
+      "function": "Neon guard rail along both road edges. New — no greybox equivalent.",
+      "pivot": "Rail centre at its base. Place at x = +/- ROAD_WIDTH/2, y = 0.",
+      "triangles": 24,
+      "parts": 2,
+      "extents_m": [
+        0.14,
+        0.5,
+        30.0
+      ],
+      "bounds_min_m": [
+        -0.07,
+        0.0,
+        -15.0
+      ],
+      "bounds_max_m": [
+        0.07,
+        0.5,
+        15.0
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Neon_Violet"
+      ],
+      "glb_bytes": 2416,
+      "notes": "Inferred addition. The greybox road just stops at its edge and the eye has nothing to measure lateral speed against; a lit rail in the periphery is the cheapest possible speed cue and costs 2 draw calls per chunk."
+    },
+    {
+      "name": "ENV_Building_Low",
+      "category": "Environment",
+      "file": "Models/Environment/ENV_Building_Low.glb",
+      "function": "Short skyline block. Replaces the low end of TrackStreamer's random building range.",
+      "pivot": "Base centre, y = 0 at ground level",
+      "triangles": 36,
+      "parts": 3,
+      "extents_m": [
+        3.225,
+        9.155,
+        3.35
+      ],
+      "bounds_min_m": [
+        -1.575,
+        0.0,
+        -1.675
+      ],
+      "bounds_max_m": [
+        1.65,
+        9.155,
+        1.675
+      ],
+      "materials": [
+        "MAT_Facade_Lit",
+        "MAT_Neon_Cyan"
+      ],
+      "glb_bytes": 10340,
+      "notes": "Three fixed heights replace the greybox's continuous random height. A fixed set can share one mesh and one material, so the whole skyline GPU-instances; a continuously random scale cannot batch and would put dozens of draw calls into scenery nobody looks at."
+    },
+    {
+      "name": "ENV_Building_Mid",
+      "category": "Environment",
+      "file": "Models/Environment/ENV_Building_Mid.glb",
+      "function": "Mid skyline block.",
+      "pivot": "Base centre, y = 0 at ground level",
+      "triangles": 36,
+      "parts": 3,
+      "extents_m": [
+        4.065,
+        15.155,
+        3.75
+      ],
+      "bounds_min_m": [
+        -1.975,
+        0.0,
+        -1.875
+      ],
+      "bounds_max_m": [
+        2.09,
+        15.155,
+        1.875
+      ],
+      "materials": [
+        "MAT_Facade_Lit",
+        "MAT_Neon_Pink"
+      ],
+      "glb_bytes": 10356,
+      "notes": "Mid tier. Vary the skyline by mixing the three prefabs and rotating them 90 degrees, not by scaling — non-uniform scale would stretch the facade texture and break the crown's proportions."
+    },
+    {
+      "name": "ENV_Building_Tall",
+      "category": "Environment",
+      "file": "Models/Environment/ENV_Building_Tall.glb",
+      "function": "Tall skyline block; the one that reads above the fog line.",
+      "pivot": "Base centre, y = 0 at ground level",
+      "triangles": 36,
+      "parts": 3,
+      "extents_m": [
+        4.905,
+        24.155,
+        4.15
+      ],
+      "bounds_min_m": [
+        -2.375,
+        0.0,
+        -2.075
+      ],
+      "bounds_max_m": [
+        2.53,
+        24.155,
+        2.075
+      ],
+      "materials": [
+        "MAT_Facade_Lit",
+        "MAT_Neon_Lilac"
+      ],
+      "glb_bytes": 10320,
+      "notes": "Tall enough to break the fog end distance, which is what gives the horizon depth instead of a flat wall of haze."
+    },
+    {
+      "name": "ENV_NeonStrip_Crown",
+      "category": "Environment",
+      "file": "Models/Environment/ENV_NeonStrip_Crown.glb",
+      "function": "Standalone rooftop light band, for dressing buildings not in the set.",
+      "pivot": "Strip centre. Place at building top + half its own height.",
+      "triangles": 12,
+      "parts": 1,
+      "extents_m": [
+        3.15,
+        0.15,
+        3.35
+      ],
+      "bounds_min_m": [
+        -1.575,
+        -0.075,
+        -1.675
+      ],
+      "bounds_max_m": [
+        1.575,
+        0.075,
+        1.675
+      ],
+      "materials": [
+        "MAT_Neon_Cyan"
+      ],
+      "glb_bytes": 1652,
+      "notes": "Extracted so the crown can be reused on any block; matches the greybox strip in TrackStreamer (body width + 0.15, 0.15 tall)."
+    },
+    {
+      "name": "ENV_Billboard_Sign",
+      "category": "Environment",
+      "file": "Models/Environment/ENV_Billboard_Sign.glb",
+      "function": "Roadside neon billboard. New — inferred set dressing.",
+      "pivot": "Base of the post, y = 0.",
+      "triangles": 108,
+      "parts": 9,
+      "extents_m": [
+        3.6,
+        6.17,
+        0.22
+      ],
+      "bounds_min_m": [
+        -1.8,
+        0.0,
+        -0.11
+      ],
+      "bounds_max_m": [
+        1.8,
+        6.17,
+        0.11
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Neon_Cyan",
+        "MAT_Neon_Pink"
+      ],
+      "glb_bytes": 6484,
+      "notes": "Inferred. The skyline is all vertical blocks, so it reads as a repeating comb; a billboard is a horizontal element that breaks that rhythm. Frame is lit, panel is dark, so it silhouettes against the fog rather than adding another bloom source competing with the coins."
+    },
+    {
+      "name": "ENV_ArchGate",
+      "category": "Environment",
+      "file": "Models/Environment/ENV_ArchGate.glb",
+      "function": "Neon arch spanning the full road width. New — inferred milestone marker.",
+      "pivot": "Centre of the road at ground level, y = 0.",
+      "triangles": 84,
+      "parts": 7,
+      "extents_m": [
+        10.6,
+        6.05,
+        0.67
+      ],
+      "bounds_min_m": [
+        -5.3,
+        0.0,
+        -0.37
+      ],
+      "bounds_max_m": [
+        5.3,
+        6.05,
+        0.3
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Neon_Cyan",
+        "MAT_Neon_Magenta"
+      ],
+      "glb_bytes": 5372,
+      "notes": "Inferred, with a gameplay job: StageService advances the run through named stages but nothing in the world marks the transition. An arch the player runs through is a free, diegetic stage boundary. Its clear height is 5.2 m — far above the 2.1 m ceiling of any obstacle — so it can never be mistaken for something that must be dodged."
+    },
+    {
+      "name": "STR_Board_Pulse",
+      "category": "Store",
+      "file": "Models/Store/STR_Board_Pulse.glb",
+      "function": "Store item 'board_pulse' (4,000 coins).",
+      "pivot": "Deck centre, y = 0 at the deck's mid-plane",
+      "triangles": 128,
+      "parts": 8,
+      "extents_m": [
+        0.47,
+        0.14,
+        1.58
+      ],
+      "bounds_min_m": [
+        -0.235,
+        -0.09,
+        -0.79
+      ],
+      "bounds_max_m": [
+        0.235,
+        0.05,
+        0.79
+      ],
+      "materials": [
+        "MAT_Metal_Steel",
+        "MAT_Neon_Cyan"
+      ],
+      "glb_bytes": 7732,
+      "notes": "Boards are pure cosmetics with no gameplay effect, so they are modelled as a display prop first: readable from the store's three-quarter angle, with the lit surfaces on the underside where a turntable shows them off."
+    },
+    {
+      "name": "STR_Board_Prism",
+      "category": "Store",
+      "file": "Models/Store/STR_Board_Prism.glb",
+      "function": "Store item 'board_prism' (500 gems).",
+      "pivot": "Deck centre, y = 0 at the deck's mid-plane",
+      "triangles": 136,
+      "parts": 9,
+      "extents_m": [
+        0.47,
+        0.22,
+        1.58
+      ],
+      "bounds_min_m": [
+        -0.235,
+        -0.09,
+        -0.79
+      ],
+      "bounds_max_m": [
+        0.235,
+        0.13,
+        0.79
+      ],
+      "materials": [
+        "MAT_Dark_Void",
+        "MAT_Neon_Lilac",
+        "MAT_Neon_White"
+      ],
+      "glb_bytes": 8984,
+      "notes": "The premium tier gets a refractive nose crystal — a silhouette change, not just a recolour, because a gem-priced item that differs only in hue reads as a bad deal next to a coin-priced one."
+    },
+    {
+      "name": "STR_Gem",
+      "category": "Store",
+      "file": "Models/Store/STR_Gem.glb",
+      "function": "The premium currency (CurrencyType.Gems). Used in the store, HUD and reward popups.",
+      "pivot": "Gem centre",
+      "triangles": 48,
+      "parts": 3,
+      "extents_m": [
+        0.48,
+        0.62,
+        0.48
+      ],
+      "bounds_min_m": [
+        -0.24,
+        -0.31,
+        -0.24
+      ],
+      "bounds_max_m": [
+        0.24,
+        0.31,
+        0.24
+      ],
+      "materials": [
+        "MAT_Glass_Tint",
+        "MAT_Neon_Blue",
+        "MAT_Neon_White"
+      ],
+      "glb_bytes": 4296,
+      "notes": "A cut octahedron with a crown of facets: eight tris for the core plus the girdle. At HUD size this is fewer triangles than the quad a sprite would need, and it can spin, which a sprite cannot."
+    },
+    {
+      "name": "STR_CoinStack",
+      "category": "Store",
+      "file": "Models/Store/STR_CoinStack.glb",
+      "function": "Soft-currency icon for CurrencyPack items (gems_100 ... gems_5000) and reward popups.",
+      "pivot": "Base of the stack, y = 0",
+      "triangles": 624,
+      "parts": 4,
+      "extents_m": [
+        0.721,
+        0.246,
+        0.7355
+      ],
+      "bounds_min_m": [
+        -0.36,
+        -0.0,
+        -0.3636
+      ],
+      "bounds_max_m": [
+        0.361,
+        0.246,
+        0.372
+      ],
+      "materials": [
+        "MAT_Neon_Gold"
+      ],
+      "glb_bytes": 12932,
+      "notes": "Four coins, not one: a pack is a quantity and the stack says so without a number. Reuses PU_Coin's exact profile so the shop icon and the thing picked up in a run are visibly the same object."
+    },
+    {
+      "name": "STR_Chest_Bundle",
+      "category": "Store",
+      "file": "Models/Store/STR_Chest_Bundle.glb",
+      "function": "Bundle icon for 'bundle_starter' and the StarterPackOffer screen.",
+      "pivot": "Base centre, y = 0",
+      "triangles": 136,
+      "parts": 6,
+      "extents_m": [
+        0.84,
+        1.0025,
+        0.7121
+      ],
+      "bounds_min_m": [
+        -0.42,
+        -0.01,
+        -0.31
+      ],
+      "bounds_max_m": [
+        0.42,
+        0.9925,
+        0.4021
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Neon_Gold",
+        "MAT_Neon_White"
+      ],
+      "glb_bytes": 7300,
+      "notes": "A chest with the lid cracked and light escaping. The offer screen has one job — communicate 'more than one thing inside' — and an open lid does it in the 300 ms before the player reads any text."
+    },
+    {
+      "name": "STR_Crown_Vip",
+      "category": "Store",
+      "file": "Models/Store/STR_Crown_Vip.glb",
+      "function": "Icon for the VIP subscription ('vip_monthly') and the VipScreen.",
+      "pivot": "Base centre, y = 0",
+      "triangles": 88,
+      "parts": 10,
+      "extents_m": [
+        0.7,
+        0.34,
+        0.7
+      ],
+      "bounds_min_m": [
+        -0.35,
+        -0.0,
+        -0.35
+      ],
+      "bounds_max_m": [
+        0.35,
+        0.34,
+        0.35
+      ],
+      "materials": [
+        "MAT_Neon_Gold",
+        "MAT_Neon_Magenta"
+      ],
+      "glb_bytes": 8364,
+      "notes": "Crown rather than a badge: subscription is status, and the item sits next to consumables in the same list where it needs to look categorically different at a glance."
+    },
+    {
+      "name": "STR_Badge_NoAds",
+      "category": "Store",
+      "file": "Models/Store/STR_Badge_NoAds.glb",
+      "function": "Icon for the 'no_ads' IAP (ItemKind.AdRemoval).",
+      "pivot": "Badge centre; disc axis along Z, square to the camera",
+      "triangles": 340,
+      "parts": 4,
+      "extents_m": [
+        0.68,
+        0.68,
+        0.19
+      ],
+      "bounds_min_m": [
+        -0.34,
+        -0.34,
+        -0.13
+      ],
+      "bounds_max_m": [
+        0.34,
+        0.34,
+        0.06
+      ],
+      "materials": [
+        "MAT_Dark_Chassis",
+        "MAT_Metal_Steel",
+        "MAT_Neon_Magenta",
+        "MAT_Neon_White"
+      ],
+      "glb_bytes": 12912,
+      "notes": "A struck disc with a bar across it. Reads as a prohibition sign at icon size, where a literal 'no advertisement' illustration would not."
+    }
+  ],
+  "validation": {
+    "failures": [],
+    "passed": true
+  },
+  "totals": {
+    "models": 27,
+    "triangles": 6256,
+    "materials": 16,
+    "textures": 9
+  }
+}
